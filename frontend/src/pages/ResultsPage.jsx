@@ -61,7 +61,7 @@ export default function ResultsPage() {
       {isRunning && (
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
-            <RefreshCw size={15} className="text-pharma-400 animate-spin" />
+            <RefreshCw size={15} className="text-indigo-400 animate-spin" />
             <h2 className="text-sm font-semibold text-white">Analysis Running…</h2>
           </div>
           <ProgressBar progress={job?.progress ?? 0} status={job?.status} />
@@ -88,12 +88,12 @@ export default function ResultsPage() {
                 key={t}
                 onClick={() => setTab(t)}
                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-800' : 'text-gray-500 hover:text-gray-300'
+                  tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-800' : 'text-slate-500 hover:text-gray-300'
                 }`}
               >
                 {t}
                 {t === 'Hypotheses' && hypotheses.length > 0 && (
-                  <span className="ml-1.5 bg-pharma-600/30 text-pharma-400 text-xs px-1.5 py-0.5 rounded-full">
+                  <span className="ml-1.5 bg-indigo-900/40 text-indigo-400 text-xs px-1.5 py-0.5 rounded-full">
                     {hypotheses.length}
                   </span>
                 )}
@@ -108,7 +108,7 @@ export default function ResultsPage() {
                   Ranked by novelty score — higher means fewer existing drugs and more dark-gene characteristics.
                 </p>
                 {hypotheses.length === 0
-                  ? <p className="text-gray-500 text-sm text-center py-12">No hypotheses generated yet.</p>
+                  ? <p className="text-slate-500 text-sm text-center py-12">No hypotheses generated yet.</p>
                   : hypotheses
                       .slice()
                       .sort((a, b) => (b.novelty_score ?? 0) - (a.novelty_score ?? 0))
@@ -126,7 +126,7 @@ export default function ResultsPage() {
                 <div className="card">
                   <h3 className="text-sm font-semibold text-white mb-4">
                     Top Upregulated Genes
-                    <span className="ml-2 text-xs text-gray-500">({dgeResults.length} genes)</span>
+                    <span className="ml-2 text-xs text-slate-500">({dgeResults.length} genes)</span>
                   </h3>
                   <DGETable results={dgeResults} />
                 </div>
@@ -145,7 +145,7 @@ export default function ResultsPage() {
                 </div>
                 {report
                   ? <div className="prose-dark"><ReactMarkdown>{report}</ReactMarkdown></div>
-                  : <p className="text-gray-500 text-sm text-center py-12">Report not yet generated.</p>
+                  : <p className="text-slate-500 text-sm text-center py-12">Report not yet generated.</p>
                 }
               </div>
             )}
@@ -164,7 +164,7 @@ export default function ResultsPage() {
 
       {!isRunning && !error && hypotheses.length === 0 && dgeResults.length === 0 && (
         <div className="card text-center py-16">
-          <p className="text-gray-500">Waiting for results…</p>
+          <p className="text-slate-500">Waiting for results…</p>
         </div>
       )}
     </div>

@@ -1,47 +1,38 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Dna, Search, FlaskConical } from 'lucide-react'
+import { Search, FlaskConical } from 'lucide-react'
 
 export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-pharma-600/20 border border-pharma-600/30 flex items-center justify-center">
-              <Dna size={20} className="text-pharma-400" />
-            </div>
-            <div>
-              <span className="font-bold text-white text-lg tracking-tight">PharmaGPT</span>
-              <span className="text-pharma-500 font-bold text-lg">-Agent</span>
-            </div>
-          </div>
+      <header className="border-b border-slate-800 bg-slate-950 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+          <span className="font-semibold text-slate-100 tracking-tight">
+            PharmaGPT <span className="text-indigo-400 font-normal">/ Agent</span>
+          </span>
           <nav className="flex items-center gap-1">
             <NavLink
               to="/"
               end
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-pharma-600/20 text-pharma-400' : 'text-gray-400 hover:text-gray-200'}`
+                `flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${isActive ? 'text-slate-100 bg-slate-800' : 'text-slate-500 hover:text-slate-300'}`
               }
             >
-              <FlaskConical size={15} /> Analyze
+              <FlaskConical size={13} /> Analyze
             </NavLink>
             <NavLink
               to="/gene/EGFR"
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-pharma-600/20 text-pharma-400' : 'text-gray-400 hover:text-gray-200'}`
+                `flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${isActive ? 'text-slate-100 bg-slate-800' : 'text-slate-500 hover:text-slate-300'}`
               }
             >
-              <Search size={15} /> Gene Lookup
+              <Search size={13} /> Gene Lookup
             </NavLink>
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
         <Outlet />
       </main>
-      <footer className="border-t border-gray-800 py-4 text-center text-xs text-gray-600">
-        PharmaGPT-Agent — Multi-Omics Drug Target Discovery
-      </footer>
     </div>
   )
 }

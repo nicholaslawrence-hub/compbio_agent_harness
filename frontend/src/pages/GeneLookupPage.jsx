@@ -6,7 +6,7 @@ import { getGenePPI, getGeneUniprot, getGeneDrugs, getGenePubmed } from '../util
 function Section({ title, children }) {
   return (
     <div className="card">
-      <h3 className="text-sm font-semibold text-white mb-3 uppercase tracking-wider text-xs text-gray-500">{title}</h3>
+      <h3 className="text-sm font-semibold text-white mb-3 uppercase tracking-wider text-xs text-slate-500">{title}</h3>
       {children}
     </div>
   )
@@ -80,28 +80,28 @@ export default function GeneLookupPage() {
             {data.uniprot ? (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Accession</span>
+                  <span className="text-slate-500">Accession</span>
                   <a
                     href={`https://www.uniprot.org/uniprotkb/${data.uniprot.accession}`}
                     target="_blank" rel="noopener noreferrer"
-                    className="text-pharma-400 hover:underline font-mono flex items-center gap-1"
+                    className="text-indigo-400 hover:underline font-mono flex items-center gap-1"
                   >
                     {data.uniprot.accession} <ExternalLink size={11} />
                   </a>
                 </div>
                 <div>
-                  <span className="text-gray-500">Protein</span>
+                  <span className="text-slate-500">Protein</span>
                   <p className="text-gray-200 text-xs mt-1">{data.uniprot.protein_name}</p>
                 </div>
                 {data.uniprot.function && (
                   <div>
-                    <span className="text-gray-500">Function</span>
+                    <span className="text-slate-500">Function</span>
                     <p className="text-gray-300 text-xs mt-1 leading-relaxed line-clamp-4">{data.uniprot.function}</p>
                   </div>
                 )}
                 {data.uniprot.pdb_ids?.length > 0 && (
                   <div>
-                    <span className="text-gray-500">PDB Structures</span>
+                    <span className="text-slate-500">PDB Structures</span>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {data.uniprot.pdb_ids.map(id => (
                         <a
@@ -117,7 +117,7 @@ export default function GeneLookupPage() {
                   </div>
                 )}
               </div>
-            ) : <p className="text-gray-500 text-sm">Not found in UniProt.</p>}
+            ) : <p className="text-slate-500 text-sm">Not found in UniProt.</p>}
           </Section>
 
           {/* Drugs */}
@@ -133,13 +133,13 @@ export default function GeneLookupPage() {
                     >
                       {d.molecule_name || d.molecule_id}
                     </a>
-                    <span className="text-gray-500">
+                    <span className="text-slate-500">
                       {d.standard_type} {d.standard_value} {d.standard_units}
                     </span>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-gray-500 text-sm">No drug interactions found in ChEMBL.</p>}
+            ) : <p className="text-slate-500 text-sm">No drug interactions found in ChEMBL.</p>}
           </Section>
 
           {/* PPI */}
@@ -157,7 +157,7 @@ export default function GeneLookupPage() {
                   </span>
                 ))}
               </div>
-            ) : <p className="text-gray-500 text-sm">No interactions found.</p>}
+            ) : <p className="text-slate-500 text-sm">No interactions found.</p>}
             {data.ppi?.error && <p className="text-xs text-red-400 mt-1">{data.ppi.error}</p>}
           </Section>
 
@@ -170,7 +170,7 @@ export default function GeneLookupPage() {
                     <a
                       href={`https://pubmed.ncbi.nlm.nih.gov/${a.pmid}/`}
                       target="_blank" rel="noopener noreferrer"
-                      className="text-pharma-400 hover:underline font-mono"
+                      className="text-indigo-400 hover:underline font-mono"
                     >
                       PMID: {a.pmid}
                     </a>
@@ -180,7 +180,7 @@ export default function GeneLookupPage() {
               </div>
             ) : (
               <div>
-                <p className="text-gray-500 text-sm">No drug-gene literature found.</p>
+                <p className="text-slate-500 text-sm">No drug-gene literature found.</p>
                 <span className="badge-dark mt-2">Potential Dark Gene</span>
               </div>
             )}

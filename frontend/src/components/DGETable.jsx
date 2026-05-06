@@ -23,12 +23,12 @@ export default function DGETable({ results = [] }) {
     >
       <span className="flex items-center gap-1">
         {children}
-        <ArrowUpDown size={11} className={sortField === field ? 'text-pharma-400' : 'text-gray-700'} />
+        <ArrowUpDown size={11} className={sortField === field ? 'text-indigo-400' : 'text-slate-700'} />
       </span>
     </th>
   )
 
-  if (!results.length) return <p className="text-sm text-gray-500 text-center py-8">No DGE results yet.</p>
+  if (!results.length) return <p className="text-sm text-slate-500 text-center py-8">No DGE results yet.</p>
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -51,7 +51,7 @@ export default function DGETable({ results = [] }) {
                 <td className="px-4 py-2.5 font-mono font-semibold">
                   <a
                     href={`/gene/${row.gene}`}
-                    className="text-pharma-400 hover:text-pharma-300"
+                    className="text-indigo-400 hover:text-indigo-300"
                   >
                     {row.gene}
                   </a>
@@ -65,10 +65,10 @@ export default function DGETable({ results = [] }) {
                   {Number(row.pvalue ?? 1).toExponential(2)}
                 </td>
                 <td className="px-4 py-2.5">
-                  <span className={`font-mono text-xs ${isSignificant ? 'text-pharma-400' : 'text-gray-500'}`}>
+                  <span className={`font-mono text-xs ${isSignificant ? 'text-indigo-400' : 'text-slate-500'}`}>
                     {padj.toExponential(2)}
                   </span>
-                  {isSignificant && <span className="ml-2 text-xs text-pharma-600">*</span>}
+                  {isSignificant && <span className="ml-2 text-xs text-indigo-600">*</span>}
                 </td>
               </tr>
             )
