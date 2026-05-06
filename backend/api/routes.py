@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from config import settings
-from agents.graph import pipeline
+from agents.graph import get_pipeline
 from agents.state import AgentState
 from db.ncbi import search_sra, fetch_pubmed_abstracts
 from db.uniprot import search_protein
@@ -55,7 +55,7 @@ def _parse_sample_conditions(raw: str) -> dict[str, str]:
 async def _run_pipeline(job_id: str, state: AgentState):
     try:
         _jobs[job_id]["status"] = "running"
-        final_state = await asyncio.to_thread(pipeline.invoke, state)
+        final_state = await asyncio.to_thread(get_pipeline().invoke, state)
         _jobs[job_id].update({
             "status": final_state.get("status", "complete"),
             "progress": 100,

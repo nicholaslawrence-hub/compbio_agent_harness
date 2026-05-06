@@ -38,5 +38,11 @@ def build_graph() -> StateGraph:
     return g.compile()
 
 
-# Singleton compiled graph
-pipeline = build_graph()
+_pipeline = None
+
+
+def get_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = build_graph()
+    return _pipeline
