@@ -4,7 +4,11 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-200 font-sans antialiased;
+    @apply bg-slate-950 text-slate-200 antialiased;
+    font-family: 'DM Sans', sans-serif;
+  }
+  code, pre, .font-mono {
+    font-family: 'DM Mono', monospace;
   }
 }
 
