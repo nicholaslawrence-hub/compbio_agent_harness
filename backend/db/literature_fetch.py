@@ -6,7 +6,7 @@ for a given gene, so no manual PDF upload is needed for standard use.
 """
 import httpx
 from Bio import Entrez
-from backend.config import settings
+from config import settings
 
 Entrez.email = settings.ncbi_email
 if settings.ncbi_api_key:

@@ -1,7 +1,7 @@
 """LangGraph pipeline: Plan → Execute → Analyze → Revise (cyclical)."""
 from langgraph.graph import StateGraph, END
-from backend.agents.state import AgentState
-from backend.agents.nodes import (
+from agents.state import AgentState
+from agents.nodes import (
     node_run_dge,
     node_enrich_ppi,
     node_literature_rag,

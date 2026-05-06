@@ -1,9 +1,9 @@
 """LangChain tool wrappers for all bioinformatics and DB functions."""
 from langchain_core.tools import tool
-from backend.tools.ppi import get_ppi_network, enrich_ppi_with_oncogenes, KNOWN_ONCOGENES
-from backend.db.uniprot import search_protein
-from backend.db.chembl import get_drug_interactions
-from backend.db.ncbi import fetch_pubmed_abstracts, search_gene_info
+from tools.ppi import get_ppi_network, enrich_ppi_with_oncogenes, KNOWN_ONCOGENES
+from db.uniprot import search_protein
+from db.chembl import get_drug_interactions
+from db.ncbi import fetch_pubmed_abstracts, search_gene_info
 
 
 @tool

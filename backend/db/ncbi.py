@@ -2,7 +2,7 @@
 import time
 from typing import Optional
 from Bio import Entrez
-from backend.config import settings
+from config import settings
 
 Entrez.email = settings.ncbi_email
 if settings.ncbi_api_key:

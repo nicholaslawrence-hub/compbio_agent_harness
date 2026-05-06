@@ -9,17 +9,17 @@ import pandas as pd
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from backend.config import settings
-from backend.agents.state import AgentState
-from backend.tools.dge import (
+from config import settings
+from agents.state import AgentState
+from tools.dge import (
     parse_count_matrix_from_upload,
     run_dge,
     top_upregulated,
 )
-from backend.tools.ppi import get_ppi_network, enrich_ppi_with_oncogenes, KNOWN_ONCOGENES
-from backend.db.pinecone_rag import query_literature
-from backend.db.uniprot import search_protein
-from backend.db.chembl import get_drug_interactions
+from tools.ppi import get_ppi_network, enrich_ppi_with_oncogenes, KNOWN_ONCOGENES
+from db.pinecone_rag import query_literature
+from db.uniprot import search_protein
+from db.chembl import get_drug_interactions
 
 
 def _llm() -> ChatOpenAI:

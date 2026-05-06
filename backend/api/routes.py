@@ -9,14 +9,14 @@ from fastapi import APIRouter, File, Form, UploadFile, HTTPException, Background
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-from backend.config import settings
-from backend.agents.graph import pipeline
-from backend.agents.state import AgentState
-from backend.db.ncbi import search_sra, fetch_pubmed_abstracts
-from backend.db.uniprot import search_protein
-from backend.db.chembl import get_drug_interactions
-from backend.db.pinecone_rag import query_literature
-from backend.tools.ppi import get_ppi_network
+from config import settings
+from agents.graph import pipeline
+from agents.state import AgentState
+from db.ncbi import search_sra, fetch_pubmed_abstracts
+from db.uniprot import search_protein
+from db.chembl import get_drug_interactions
+from db.pinecone_rag import query_literature
+from tools.ppi import get_ppi_network
 
 router = APIRouter()
 

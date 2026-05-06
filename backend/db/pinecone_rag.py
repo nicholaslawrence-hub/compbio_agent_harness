@@ -11,8 +11,8 @@ Flow:
 import json
 import hashlib
 from pinecone import Pinecone
-from backend.config import settings
-from backend.db.literature_fetch import fetch_gene_literature, format_for_prompt
+from config import settings
+from db.literature_fetch import fetch_gene_literature, format_for_prompt
 
 
 def _index():

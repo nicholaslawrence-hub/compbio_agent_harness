@@ -3,6 +3,7 @@
 *.env
 .env.local
 .env.production
+backend/Procfile
 
 # Python
 __pycache__/
@@ -20,6 +21,7 @@ data/raw/
 data/processed/
 data/results/
 data/demo_count_matrix.tsv
+count_matrix.tsv
 
 # Frontend
 frontend/node_modules/
