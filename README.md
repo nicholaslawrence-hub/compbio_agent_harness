@@ -1,5 +1,7 @@
 # PharmaGPT /agent
 
+![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)
+
 An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix and a disease context — the pipeline runs differential expression, maps protein interaction networks, mines the biomedical literature, annotates known drugs, and synthesizes ranked therapeutic hypotheses using GPT-4o.
 
 **Live:** [pharmgpt.vercel.app](https://pharmgpt.vercel.app) &nbsp;·&nbsp; **API:** [compbioagentbackend-production.up.railway.app/docs](https://compbioagentbackend-production.up.railway.app/docs)
