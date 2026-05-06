@@ -2,7 +2,7 @@
 
 An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix and a disease context, the pipeline will run differential expression, map protein interaction networks, retrieve relevant chunks from the biomedical literature, annotate  known drugs, and synthesize ranked therapeutic hypotheses. While this project is in early development, data availability to disease context is relatively limited, so I would recommend investigating the sample diseases. 
 
-**Live:** [pharmgpt.vercel.app](https://pharmgpt.vercel.app) &nbsp;·&nbsp; **API:** [compbioagentbackend-production.up.railway.app/docs](https://compbioagentbackend-production.up.railway.app/docs)
+**Live:** [pharmgpt.vercel.app](https://compbio-agent-harness.vercel.app/) &nbsp;·&nbsp; **API:** [compbioagentbackend-production.up.railway.app/docs](https://compbioagentbackend-production.up.railway.app/docs)
 
 ---
 
