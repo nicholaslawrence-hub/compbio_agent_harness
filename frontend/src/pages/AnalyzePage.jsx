@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useLayoutEffect, useEffect } from 'react'
 import UploadForm from '../components/UploadForm.jsx'
 
 const STEPS = [
@@ -30,7 +30,7 @@ const STEPS = [
     n: 5,
     label: 'Hypothesis Synthesis',
     detail:
-      'GPT-4o receives the combined DGE statistics, PPI context, literature passages, and drug landscape for each prioritised gene. Chain-of-thought reasoning produces a structured hypothesis: proposed mechanism of action, supporting evidence, and a novelty score 0–1. Dark genes connected to oncogene networks with no existing drugs surface at the top.',
+      'GPT-4o receives the combined DGE statistics, PPI context, literature passages, and drug landscape for each prioritized gene. Chain-of-thought reasoning produces a structured hypothesis: proposed mechanism of action, supporting evidence, and a novelty score 0–1. Dark genes connected to oncogene networks with no existing drugs surface at the top.',
   },
   {
     n: 6,
@@ -60,22 +60,67 @@ const FIELD_DOCS = [
 ]
 
 const EXAMPLE_GENES = [
-  { symbol: 'TGFBI', lfc: '+4.2', padj: '0.0003', novelty: 0.91, dark: true },
-  { symbol: 'MMP9',  lfc: '+3.8', padj: '0.0011', novelty: 0.74, dark: false },
-  { symbol: 'VEGFA', lfc: '+3.1', padj: '0.0024', novelty: 0.48, dark: false },
+  { symbol: 'TGFBI', lfc: '+4.2', padj: '0.0003', novelty: 0.91 },
+  { symbol: 'MMP9',  lfc: '+3.8', padj: '0.0011', novelty: 0.74 },
+  { symbol: 'VEGFA', lfc: '+3.1', padj: '0.0024', novelty: 0.48 },
 ]
 
-function NoveltyBar({ score }) {
+const HYPOTHESIS_TEXT =
+  'TGFBI (transforming growth factor β-induced) is markedly upregulated in KRAS-mutant PDAC ' +
+  'and physically interacts with integrin αvβ3 to activate downstream FAK/PI3K signaling. No ' +
+  'approved small-molecule inhibitors target TGFBI directly, making it a high-novelty candidate. ' +
+  'Cross-referencing 31 PubMed abstracts reveals consistent association with stromal remodeling ' +
+  'and chemotherapy resistance. Recommended follow-up: siRNA knockdown in PANC-1 cells, co-IP ' +
+  'to confirm integrin binding, and patient stratification by TGFBI expression quartile.'
+
+// Fires callback once when the element enters the viewport
+function useInView(ref, options = {}) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    if (!ref.current) return
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); obs.disconnect() }
+    }, { threshold: 0.15, ...options })
+    obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [ref])
+  return visible
+}
+
+function AnimatedBar({ score, visible }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+      <div className="flex-1 h-px bg-slate-800 rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full bg-amber-400"
-          style={{ width: `${score * 100}%`, opacity: 0.6 + score * 0.4 }}
+          className="h-full rounded-full bg-amber-400 transition-all duration-700 ease-out"
+          style={{
+            width: visible ? `${score * 100}%` : '0%',
+            opacity: visible ? (0.55 + score * 0.45) : 0,
+          }}
         />
       </div>
       <span className="font-mono text-xs text-slate-500 w-8 text-right">{score.toFixed(2)}</span>
     </div>
+  )
+}
+
+function WhisperText({ text, visible }) {
+  const words = text.split(' ')
+  return (
+    <p className="text-sm text-slate-400 leading-relaxed">
+      {words.map((word, i) => (
+        <span
+          key={i}
+          className="transition-opacity duration-300"
+          style={{
+            opacity: visible ? 1 : 0,
+            transitionDelay: visible ? `${i * 22}ms` : '0ms',
+          }}
+        >
+          {word}{' '}
+        </span>
+      ))}
+    </p>
   )
 }
 
@@ -86,10 +131,10 @@ export default function AnalyzePage() {
   const bubbleRef    = useRef(null)
   const [line, setLine] = useState(null)
 
-  // Measure AFTER the 300 ms transition completes so coordinates are accurate
-  useEffect(() => {
+  // Instant measurement via RAF — one frame after DOM mutation, no perceptible delay
+  useLayoutEffect(() => {
     if (!activeStep) { setLine(null); return }
-    const id = setTimeout(() => {
+    const raf = requestAnimationFrame(() => {
       const cRect = containerRef.current?.getBoundingClientRect()
       const lbl   = labelRefs.current[activeStep - 1]?.getBoundingClientRect()
       const bub   = bubbleRef.current?.getBoundingClientRect()
@@ -100,11 +145,15 @@ export default function AnalyzePage() {
         x2: bub.left  - cRect.left,
         y2: bub.top   + bub.height / 2 - cRect.top,
       })
-    }, 310)
-    return () => clearTimeout(id)
+    })
+    return () => cancelAnimationFrame(raf)
   }, [activeStep])
 
   const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
+
+  // Scroll-triggered visibility for the example section
+  const exampleRef = useRef(null)
+  const exampleVisible = useInView(exampleRef)
 
   return (
     <div className="space-y-20">
@@ -118,7 +167,7 @@ export default function AnalyzePage() {
         <p className="text-base text-slate-400 max-w-lg leading-relaxed">
           Upload an RNA-seq count matrix and a disease context. The pipeline runs
           differential expression, maps protein interaction networks, mines the
-          literature, annotates known drugs, and synthesises ranked hypotheses —
+          literature, annotates known drugs, and synthesizes ranked hypotheses —
           end to end, without leaving the browser.
         </p>
       </div>
@@ -129,7 +178,6 @@ export default function AnalyzePage() {
           How it works
         </p>
 
-        {/* w-80 on the left column keeps it fixed-width so the right panel never shifts */}
         <div ref={containerRef} className="relative flex gap-40 items-stretch">
 
           {line && (
@@ -147,6 +195,7 @@ export default function AnalyzePage() {
             </svg>
           )}
 
+          {/* Fixed-width column prevents the right panel from shifting */}
           <div className="shrink-0 w-80 flex flex-col z-10">
             {STEPS.map((step, i) => {
               const isActive = activeStep === step.n
@@ -217,9 +266,18 @@ export default function AnalyzePage() {
       </div>
 
       {/* ── Example use-case ─────────────────────────────────── */}
-      <div className="border-t border-slate-800 pt-14">
+      <div
+        ref={exampleRef}
+        className="border-t border-slate-800 pt-14 transition-all duration-700 ease-out"
+        style={{
+          opacity:   exampleVisible ? 1 : 0,
+          transform: exampleVisible ? 'translateY(0)' : 'translateY(20px)',
+        }}
+      >
         <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-2">Example</p>
-        <h2 className="text-2xl font-semibold text-slate-100 mb-1">KRAS-mutant Pancreatic Cancer</h2>
+        <h2 className="text-2xl font-semibold text-slate-100 mb-1">
+          KRAS-mutant Pancreatic Cancer
+        </h2>
         <p className="text-sm text-slate-500 mb-10">
           18 tumor vs 18 adjacent-normal samples · GEO accession GSE71729
         </p>
@@ -228,28 +286,21 @@ export default function AnalyzePage() {
 
           {/* Top hits */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
-              Top prioritised targets
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-6">
+              Top prioritized targets
             </p>
-            <div className="space-y-5">
+            <div className="space-y-6">
               {EXAMPLE_GENES.map(g => (
                 <div key={g.symbol}>
-                  <div className="flex items-baseline justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-slate-200">{g.symbol}</span>
-                      {g.dark && (
-                        <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-400/60">
-                          dark gene
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-200">{g.symbol}</span>
                     <div className="flex items-center gap-4 text-xs font-mono text-slate-600">
                       <span>log₂FC {g.lfc}</span>
                       <span>padj {g.padj}</span>
                     </div>
                   </div>
-                  <NoveltyBar score={g.novelty} />
-                  <p className="text-[10px] text-slate-700 mt-1">novelty score</p>
+                  <AnimatedBar score={g.novelty} visible={exampleVisible} />
+                  <p className="text-[10px] text-slate-700 mt-1.5">novelty score</p>
                 </div>
               ))}
             </div>
@@ -260,18 +311,17 @@ export default function AnalyzePage() {
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
               Generated hypothesis · TGFBI
             </p>
-            <p className="text-sm text-slate-400 leading-relaxed flex-1">
-              TGFBI (transforming growth factor β-induced) is markedly upregulated in KRAS-mutant
-              PDAC and physically interacts with integrin αvβ3 to activate downstream FAK/PI3K
-              signalling. No approved small-molecule inhibitors target TGFBI directly, making it
-              a high-novelty candidate. Cross-referencing 31 PubMed abstracts reveals consistent
-              association with stromal remodelling and chemotherapy resistance. Recommended
-              follow-up: siRNA knockdown in PANC-1 cells, co-IP to confirm integrin binding,
-              and patient stratification by TGFBI expression quartile.
-            </p>
+            <div className="flex-1">
+              <WhisperText text={HYPOTHESIS_TEXT} visible={exampleVisible} />
+            </div>
             <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
               <span className="text-[10px] font-mono text-slate-700">Novelty score</span>
-              <span className="font-mono text-sm text-amber-400">0.91</span>
+              <span
+                className="font-mono text-sm text-amber-400 transition-opacity duration-500"
+                style={{ opacity: exampleVisible ? 1 : 0, transitionDelay: '1400ms' }}
+              >
+                0.91
+              </span>
             </div>
           </div>
 
