@@ -2,7 +2,13 @@ import { useState, useRef, useLayoutEffect, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
-const TYPED_TEXT = 'drug hypothesis.'
+const PHRASES = [
+  'drug hypothesis.',
+  'novel targets.',
+  'clinical insights.',
+  'therapeutic leads.',
+  'mechanistic evidence.',
+]
 
 const STEPS = [
   {
@@ -124,15 +130,32 @@ export default function AnalyzePage() {
 
   const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
 
-  // Typing animation
-  const [typedCount, setTypedCount] = useState(0)
-  const typingDone = typedCount >= TYPED_TEXT.length
+  // Typing animation — cycles through PHRASES
+  const [phraseIndex, setPhraseIndex] = useState(0)
+  const [charCount, setCharCount] = useState(0)
+  const [typingPhase, setTypingPhase] = useState('typing') // 'typing' | 'holding' | 'deleting'
+  const currentPhrase = PHRASES[phraseIndex]
+
   useEffect(() => {
-    if (typingDone) return
-    const delay = typedCount === 0 ? 700 : 68
-    const id = setTimeout(() => setTypedCount(c => c + 1), delay)
+    let id
+    if (typingPhase === 'typing') {
+      if (charCount < currentPhrase.length) {
+        id = setTimeout(() => setCharCount(c => c + 1), charCount === 0 ? 700 : 68)
+      } else {
+        id = setTimeout(() => setTypingPhase('holding'), 1800)
+      }
+    } else if (typingPhase === 'holding') {
+      id = setTimeout(() => setTypingPhase('deleting'), 300)
+    } else if (typingPhase === 'deleting') {
+      if (charCount > 0) {
+        id = setTimeout(() => setCharCount(c => c - 1), 38)
+      } else {
+        setPhraseIndex(i => (i + 1) % PHRASES.length)
+        setTypingPhase('typing')
+      }
+    }
     return () => clearTimeout(id)
-  }, [typedCount, typingDone])
+  }, [typingPhase, charCount, currentPhrase])
 
   // Scroll-driven example animation
   const exampleRef = useRef(null)
@@ -163,8 +186,8 @@ export default function AnalyzePage() {
           From count matrix<br />
           <span className="text-amber-400">
             to{' '}
-            {TYPED_TEXT.slice(0, typedCount)}
-            <span className={`inline-block w-[3px] transition-opacity duration-500 ${typingDone ? 'opacity-0' : 'cursor-blink'}`}>_</span>
+            {currentPhrase.slice(0, charCount)}
+            <span className="inline-block w-[3px] cursor-blink">_</span>
           </span>
         </h1>
         <p className="text-lg text-slate-400 max-w-xl leading-relaxed">
