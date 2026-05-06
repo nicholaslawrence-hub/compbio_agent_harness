@@ -1,8 +1,6 @@
-# PharmaGPT /agent
+# Agentic RNA-Seq Analysis Harness
 
-![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)
-
-An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix and a disease context — the pipeline runs differential expression, maps protein interaction networks, mines the biomedical literature, annotates known drugs, and synthesizes ranked therapeutic hypotheses using GPT-4o.
+An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix and a disease context, the pipeline will run differential expression, map protein interaction networks, retrieve relevant chunks from the biomedical literature, annotate  known drugs, and synthesize ranked therapeutic hypotheses. While this project is in early development, data availability to disease context is relatively limited, so I would recommend investigating the sample diseases. 
 
 **Live:** [pharmgpt.vercel.app](https://pharmgpt.vercel.app) &nbsp;·&nbsp; **API:** [compbioagentbackend-production.up.railway.app/docs](https://compbioagentbackend-production.up.railway.app/docs)
 
@@ -13,7 +11,7 @@ An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix 
 ```
 Count Matrix + Disease Term
          ↓
-[1] Differential Expression   PyDESeq2 (negative binomial) or Welch t-test fallback
+[1] Differential Expression   PyDESeq2 (negative binomial)
          ↓                    Benjamini–Hochberg correction · padj < 0.05, |log₂FC| > 1
 [2] PPI Network               STRING DB · high-confidence partners · oncogene tagging
          ↓
@@ -21,12 +19,12 @@ Count Matrix + Disease Term
          ↓                    Semantic search per gene · dark gene flagging
 [4] Drug Annotation           UniProt (protein/structure) · ChEMBL (drugs/trials)
          ↓
-[5] Hypothesis Synthesis      GPT-4o chain-of-thought · mechanism + novelty score 0–1
+[5] Hypothesis Synthesis      Chain-of-Thought reasoning · mechanism + returns a novelty score from 0-1
          ↓
-[6] Report Generation         Publication-style markdown report · inline + copyable
+[6] Report Generation         Returns an executive copyable inline executive summary/report of relevant mechanism of action of inputted genes
 ```
 
-Orchestrated as a directed LangGraph graph with conditional routing (e.g. DGE failure skips downstream nodes).
+This pipeline is orchestrated as a directed LangGraph graph with conditional routing (e.g. DGE failure skips downstream nodes).
 
 ---
 
@@ -78,6 +76,8 @@ npm run dev                      # http://localhost:5173
 The Vite dev server proxies `/api` to `localhost:8000` automatically.
 
 ### Demo data
+
+You can create demo data through the provided script below for testing purposes. 
 
 ```bash
 python scripts/generate_demo_data.py
@@ -176,7 +176,7 @@ compbio_agent_harness/
 
 ### Railway (backend)
 
-1. Connect the repo, set service root to `/` (uses root `Dockerfile`)
+1. Connect the repo, set service root to `backend/` (uses `backend/Dockerfile`)
 2. Add environment variables: `OPENAI_API_KEY`, `PINECONE_API_KEY`, `NCBI_EMAIL`, `JWT_SECRET`
 
 ### Vercel (frontend)
