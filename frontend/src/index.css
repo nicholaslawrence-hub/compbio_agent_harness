@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 font-sans antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-xl p-6;
+  }
+  .btn-primary {
+    @apply bg-pharma-600 hover:bg-pharma-700 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium px-4 py-2 rounded-lg transition-colors;
+  }
+  .label {
+    @apply block text-sm font-medium text-gray-400 mb-1;
+  }
+  .input {
+    @apply w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-pharma-500 focus:border-transparent;
+  }
+  .badge-dark {
+    @apply inline-flex items-center gap-1 bg-amber-900/40 text-amber-300 border border-amber-700/50 text-xs px-2 py-0.5 rounded-full;
+  }
+  .badge-known {
+    @apply inline-flex items-center gap-1 bg-blue-900/40 text-blue-300 border border-blue-700/50 text-xs px-2 py-0.5 rounded-full;
+  }
+  .badge-oncogene {
+    @apply inline-flex items-center gap-1 bg-red-900/40 text-red-300 border border-red-700/50 text-xs px-2 py-0.5 rounded-full;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { @apply bg-gray-900; }
+::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
+
+/* Markdown */
+.prose-dark h1, .prose-dark h2, .prose-dark h3 { @apply text-gray-100 font-bold mt-6 mb-2; }
+.prose-dark h1 { @apply text-2xl; }
+.prose-dark h2 { @apply text-xl border-b border-gray-800 pb-2; }
+.prose-dark h3 { @apply text-lg text-green-400; }
+.prose-dark p { @apply text-gray-300 mb-3 leading-relaxed; }
+.prose-dark ul { @apply list-disc list-inside text-gray-300 mb-3 space-y-1; }
+.prose-dark li { @apply text-sm; }
+.prose-dark strong { @apply text-white font-semibold; }
+.prose-dark code { @apply bg-gray-800 text-green-400 px-1.5 py-0.5 rounded text-sm; }
