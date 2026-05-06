@@ -63,6 +63,7 @@ export default function AnalyzePage() {
   const [activeStep, setActiveStep] = useState(null)
   const containerRef  = useRef(null)
   const circleRefs    = useRef([])
+  const labelRefs     = useRef([])
   const bubbleRef     = useRef(null)
   const [line, setLine] = useState(null)
 
@@ -72,15 +73,15 @@ export default function AnalyzePage() {
       return
     }
     const cRect = containerRef.current.getBoundingClientRect()
-    const circ  = circleRefs.current[activeStep - 1]?.getBoundingClientRect()
+    const lbl   = labelRefs.current[activeStep - 1]?.getBoundingClientRect()
     const bub   = bubbleRef.current.getBoundingClientRect()
-    if (!circ) return
+    if (!lbl) return
 
     setLine({
-      x1: circ.right  - cRect.left,
-      y1: circ.top    + circ.height / 2 - cRect.top,
-      x2: bub.left    - cRect.left,
-      y2: bub.top     + bub.height / 2  - cRect.top,
+      x1: lbl.right - cRect.left,
+      y1: lbl.top   + lbl.height / 2 - cRect.top,
+      x2: bub.left  - cRect.left,
+      y2: bub.top   + bub.height / 2 - cRect.top,
     })
   }, [activeStep])
 
@@ -90,7 +91,7 @@ export default function AnalyzePage() {
     <div className="space-y-16">
 
       {/* ── Pipeline ─────────────────────────────────────────── */}
-      <div ref={containerRef} className="relative flex gap-14 items-stretch">
+      <div ref={containerRef} className="relative flex gap-24 items-stretch">
 
         {/* SVG connector */}
         {line && (
@@ -98,23 +99,18 @@ export default function AnalyzePage() {
             className="absolute inset-0 pointer-events-none"
             style={{ width: '100%', height: '100%', overflow: 'visible' }}
           >
-            {/* bezier from circle to bubble */}
             <path
-              d={`M ${line.x1} ${line.y1} C ${line.x1 + 70} ${line.y1}, ${line.x2 - 70} ${line.y2}, ${line.x2} ${line.y2}`}
-              stroke="rgba(251,191,36,0.3)"
-              strokeWidth="1.5"
-              strokeDasharray="5 4"
+              d={`M ${line.x1} ${line.y1} C ${line.x1 + 60} ${line.y1}, ${line.x2 - 60} ${line.y2}, ${line.x2} ${line.y2}`}
+              stroke="rgba(251,191,36,0.18)"
+              strokeWidth="1"
               fill="none"
             />
-            {/* dot at circle */}
-            <circle cx={line.x1} cy={line.y1} r="3.5" fill="rgba(251,191,36,0.55)" />
-            {/* dot at bubble */}
-            <circle cx={line.x2} cy={line.y2} r="3.5" fill="rgba(251,191,36,0.55)" />
+            <circle cx={line.x2} cy={line.y2} r="2.5" fill="rgba(251,191,36,0.35)" />
           </svg>
         )}
 
         {/* Left: vertical step list */}
-        <div className="shrink-0 w-64 flex flex-col z-10">
+        <div className="shrink-0 w-72 flex flex-col z-10">
           {STEPS.map((step, i) => {
             const isActive = activeStep === step.n
             const isLast   = i === STEPS.length - 1
@@ -142,9 +138,10 @@ export default function AnalyzePage() {
                 </div>
 
                 <button
+                  ref={el => { labelRefs.current[i] = el }}
                   type="button"
                   onClick={() => toggle(step.n)}
-                  className={`text-left transition-all duration-300 leading-snug ${
+                  className={`text-left transition-all duration-300 leading-snug whitespace-nowrap ${
                     isActive
                       ? 'text-xl font-semibold text-slate-100 pt-2.5'
                       : 'text-base font-medium text-slate-500 hover:text-slate-300 pt-2.5'
