@@ -6,7 +6,7 @@ export default function Layout() {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-50 bg-slate-950">
         <div className="h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
-        <div className="max-w-5xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-10 h-20 flex items-center justify-between">
 
           {/* Logo — clicks back to home */}
           <Link to="/" className="flex items-center gap-3 group">
@@ -54,11 +54,11 @@ export default function Layout() {
         <div className="h-px bg-slate-800/80" />
       </header>
 
-      <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-10 py-10">
         <Outlet />
       </main>
 
-      <footer className="max-w-5xl mx-auto w-full px-6 py-6 flex items-center justify-between border-t border-slate-800/60">
+      <footer className="max-w-7xl mx-auto w-full px-10 py-6 flex items-center justify-between border-t border-slate-800/60">
         <span className="text-xs text-slate-700">PharmaGPT /agent</span>
         <a
           href="https://github.com/nicholaslawrence-hub/compbio_agent_harness"

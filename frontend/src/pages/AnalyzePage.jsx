@@ -184,7 +184,7 @@ export default function AnalyzePage() {
       {/* ── Example use-case ─────────────────────────────────── */}
       <div ref={exampleRef}>
         <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-2"
-          style={{ opacity: scrollProgress }}>
+          style={{ opacity: scrollProgress, transform: `translateY(${(1 - scrollProgress) * 80}px)` }}>
           KRAS-mutant Pancreatic Cancer · GEO GSE71729
         </p>
 
@@ -193,7 +193,7 @@ export default function AnalyzePage() {
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6"
             style={{
               opacity: scrollProgress,
-              transform: `translateX(${(1 - scrollProgress) * -60}px)`,
+              transform: `translateY(${(1 - scrollProgress) * 80}px)`,
             }}>
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-6">
               Top prioritized targets
@@ -218,7 +218,7 @@ export default function AnalyzePage() {
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 flex flex-col"
             style={{
               opacity: scrollProgress,
-              transform: `translateX(${(1 - scrollProgress) * 60}px)`,
+              transform: `translateY(${(1 - scrollProgress) * 80}px)`,
             }}>
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
               Generated hypothesis · TGFBI
