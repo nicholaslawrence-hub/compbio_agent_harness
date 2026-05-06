@@ -1,14 +1,16 @@
 import { Outlet, NavLink, Link } from 'react-router-dom'
-import { Search, FlaskConical, Dna, Github } from 'lucide-react'
+import { Search, Dna, Github, UserCircle2 } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function Layout() {
+  const { user, loading } = useAuth()
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-50 bg-slate-950">
         <div className="h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
         <div className="max-w-7xl mx-auto px-10 h-20 flex items-center justify-between">
 
-          {/* Logo — clicks back to home */}
           <Link to="/" className="flex items-center gap-3 group">
             <Dna size={22} className="text-amber-400" strokeWidth={1.5} />
             <span className="font-semibold text-lg text-slate-100 tracking-tight group-hover:text-white transition-colors duration-150">
@@ -17,7 +19,6 @@ export default function Layout() {
             </span>
           </Link>
 
-          {/* Nav */}
           <nav className="flex items-center gap-2">
             <NavLink
               to="/gene/EGFR"
@@ -37,6 +38,7 @@ export default function Layout() {
                 </>
               )}
             </NavLink>
+
             <NavLink
               to="/run"
               className={({ isActive }) =>
@@ -49,6 +51,25 @@ export default function Layout() {
             >
               Run Analysis
             </NavLink>
+
+            {!loading && (
+              user ? (
+                <Link
+                  to="/account"
+                  className="flex items-center gap-2 pl-3 ml-1 border-l border-slate-800 text-sm text-slate-400 hover:text-slate-200 transition-colors duration-150"
+                >
+                  <UserCircle2 size={18} strokeWidth={1.5} />
+                  <span className="font-medium">{user.name.split(' ')[0]}</span>
+                </Link>
+              ) : (
+                <Link
+                  to="/login"
+                  className="ml-1 pl-3 border-l border-slate-800 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors duration-150"
+                >
+                  Log in
+                </Link>
+              )
+            )}
           </nav>
         </div>
         <div className="h-px bg-slate-800/80" />

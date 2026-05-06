@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -16,6 +16,9 @@ from db.ncbi import search_sra, fetch_pubmed_abstracts
 from db.uniprot import search_protein
 from db.chembl import get_drug_interactions
 from db.pinecone_rag import query_literature
+from db.database import SessionLocal
+from db.user_models import JobRecord
+from auth import decode_token
 from tools.ppi import get_ppi_network
 
 router = APIRouter()
@@ -55,9 +58,11 @@ def _parse_sample_conditions(raw: str) -> dict[str, str]:
 async def _run_pipeline(job_id: str, state: AgentState):
     try:
         _jobs[job_id]["status"] = "running"
+        _sync_job_status(job_id, "running")
         final_state = await asyncio.to_thread(get_pipeline().invoke, state)
+        final_status = final_state.get("status", "complete")
         _jobs[job_id].update({
-            "status": final_state.get("status", "complete"),
+            "status": final_status,
             "progress": 100,
             "result": {
                 "top_genes": final_state.get("top_genes", []),
@@ -70,14 +75,29 @@ async def _run_pipeline(job_id: str, state: AgentState):
             },
             "errors": final_state.get("errors", []),
         })
+        _sync_job_status(job_id, final_status)
     except Exception as e:
         _jobs[job_id].update({"status": "failed", "errors": [str(e)], "progress": 0})
+        _sync_job_status(job_id, "failed")
+
+
+def _sync_job_status(job_id: str, status: str):
+    try:
+        db = SessionLocal()
+        record = db.query(JobRecord).filter(JobRecord.job_id == job_id).first()
+        if record:
+            record.status = status
+            db.commit()
+        db.close()
+    except Exception:
+        pass
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/analyze", summary="Upload count matrix and start analysis pipeline")
 async def start_analysis(
+    request: Request,
     background_tasks: BackgroundTasks,
     count_matrix: UploadFile = File(..., description="TSV/CSV count matrix (genes × samples)"),
     disease_term: str = Form(..., description="Disease name, e.g. 'Glioblastoma'"),
@@ -87,7 +107,6 @@ async def start_analysis(
 ):
     job_id = str(uuid.uuid4())
 
-    # Save uploaded file
     save_path = settings.raw_dir / f"{job_id}_{count_matrix.filename}"
     content = await count_matrix.read()
     save_path.write_bytes(content)
@@ -114,8 +133,22 @@ async def start_analysis(
     }
 
     _jobs[job_id] = {"status": "queued", "progress": 0, "result": None, "errors": []}
-    background_tasks.add_task(_run_pipeline, job_id, initial_state)
 
+    # Associate job with user if authenticated
+    auth_header = request.headers.get("Authorization", "")
+    user_id = None
+    if auth_header.startswith("Bearer "):
+        user_id = decode_token(auth_header[7:])
+    if user_id is not None:
+        try:
+            db = SessionLocal()
+            db.add(JobRecord(job_id=job_id, user_id=user_id, disease_term=disease_term))
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
+    background_tasks.add_task(_run_pipeline, job_id, initial_state)
     return {"job_id": job_id, "message": "Analysis started"}
 
 

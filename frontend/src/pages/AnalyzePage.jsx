@@ -1,5 +1,6 @@
 import { useState, useRef, useLayoutEffect, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 const TYPED_TEXT = 'drug hypothesis.'
 
@@ -97,6 +98,7 @@ function WhisperText({ text, visible }) {
 
 export default function AnalyzePage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [activeStep, setActiveStep] = useState(null)
   const containerRef = useRef(null)
   const labelRefs    = useRef([])
@@ -171,13 +173,30 @@ export default function AnalyzePage() {
           literature, annotates known drugs, and synthesizes ranked hypotheses
           end to end, without leaving the browser.
         </p>
-        <div className="flex justify-center mt-20">
-          <button
-            onClick={() => navigate('/run')}
-            className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-2xl px-24 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
-          >
-            Start Analysis
-          </button>
+        <div className="flex items-center justify-center gap-4 mt-20">
+          {user ? (
+            <button
+              onClick={() => navigate('/run')}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-2xl px-24 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+            >
+              Start Analysis
+            </button>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+              >
+                Log in / Sign up
+              </Link>
+              <button
+                onClick={() => navigate('/run')}
+                className="border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-slate-100 font-semibold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+              >
+                Use as Guest
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -332,13 +351,30 @@ export default function AnalyzePage() {
       </div>
 
       {/* ── CTA footer ───────────────────────────────────────── */}
-      <div className="border-t border-slate-800 pt-14 pb-16 flex items-center justify-center">
-        <button
-          onClick={() => navigate('/run')}
-          className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-20 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
-        >
-          Start Analysis
-        </button>
+      <div className="border-t border-slate-800 pt-14 pb-16 flex items-center justify-center gap-4">
+        {user ? (
+          <button
+            onClick={() => navigate('/run')}
+            className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-20 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
+          >
+            Start Analysis
+          </button>
+        ) : (
+          <>
+            <Link
+              to="/login"
+              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-12 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
+            >
+              Log in / Sign up
+            </Link>
+            <button
+              onClick={() => navigate('/run')}
+              className="border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-slate-100 font-semibold text-xl px-8 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
+            >
+              Use as Guest
+            </button>
+          </>
+        )}
       </div>
 
     </div>

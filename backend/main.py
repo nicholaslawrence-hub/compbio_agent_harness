@@ -3,6 +3,8 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
+from api.auth_routes import router as auth_router
+from db.database import init_db
 
 app = FastAPI(
     title="Drug-Target Discovery Tool",
@@ -26,6 +28,12 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+def startup():
+    init_db()
 
 
 @app.get("/health")

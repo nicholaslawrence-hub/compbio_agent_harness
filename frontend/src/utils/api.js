@@ -1,7 +1,16 @@
 const BASE = import.meta.env.VITE_API_BASE || '/api/v1'
 
+function authHeader() {
+  const token = localStorage.getItem('pharmagpt_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export async function startAnalysis(formData) {
-  const res = await fetch(`${BASE}/analyze`, { method: 'POST', body: formData })
+  const res = await fetch(`${BASE}/analyze`, {
+    method: 'POST',
+    headers: authHeader(),
+    body: formData,
+  })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
