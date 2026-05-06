@@ -2,7 +2,7 @@
 
 An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix and a disease context, the pipeline will run differential expression, map protein interaction networks, retrieve relevant chunks from the biomedical literature, annotate  known drugs, and synthesize ranked therapeutic hypotheses. While this project is in early development, data availability to disease context is relatively limited, so I would recommend investigating the sample diseases. 
 
-**Live:** [compbio-agent-harness.vercel.app](https://compbio-agent-harness.vercel.app/) &nbsp;·&nbsp; **API:** [compbioagentbackend-production.up.railway.app/docs](https://compbioagentbackend-production.up.railway.app/docs)
+**Live:** [compbio-agent-harness.vercel.app](https://compbio-agent-harness.vercel.app/)
 
 ---
 
@@ -160,15 +160,6 @@ compbio_agent_harness/
 | `GET` | `/api/v1/gene/{symbol}/pubmed` | PubMed abstracts |
 | `GET` | `/api/v1/gene/{symbol}/literature` | Pinecone semantic search |
 | `GET` | `/api/v1/sra/search?disease=` | NCBI SRA dataset search |
-
-### Auth
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/auth/register` | Create account · returns JWT |
-| `POST` | `/api/v1/auth/login` | Sign in · returns JWT |
-| `GET` | `/api/v1/auth/me` | Current user (Bearer token) |
-| `GET` | `/api/v1/auth/history` | Analysis history for authenticated user |
 
 ---
 
