@@ -28,9 +28,9 @@ This pipeline is orchestrated as a directed LangGraph graph with conditional rou
 
 ---
 
-## Stack
+## Project Stack
 
-| Layer | Technology |
+| Layer | Tools Used |
 |---|---|
 | Frontend | React 18, Vite, Tailwind CSS, React Router v6 |
 | Backend | FastAPI, uvicorn, LangGraph, LangChain |
