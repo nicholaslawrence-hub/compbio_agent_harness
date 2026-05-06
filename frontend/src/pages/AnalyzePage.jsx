@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
 import UploadForm from '../components/UploadForm.jsx'
 
 const STEPS = [
@@ -6,13 +6,13 @@ const STEPS = [
     n: 1,
     label: 'Differential Expression',
     detail:
-      'Your count matrix is tested gene-by-gene for statistically significant expression changes between case and control. PyDESeq2 applies a negative binomial model and Benjamini–Hochberg correction. Only genes clearing padj < 0.05 and |log₂FC| > 1 feed into downstream steps — everything else is filtered out.',
+      'Your count matrix is tested gene-by-gene for statistically significant expression changes between case and control. PyDESeq2 applies a negative binomial model with Benjamini–Hochberg correction. Only genes clearing padj < 0.05 and |log₂FC| > 1 feed into downstream steps — everything else is filtered out.',
   },
   {
     n: 2,
     label: 'Protein Interaction Network',
     detail:
-      'Top upregulated genes are queried against the STRING database to map protein–protein interaction networks. High-confidence partners are scored and cross-referenced against a curated oncogene list — surfacing which of your hits are wired into known disease driver networks and which connections might be therapeutically exploitable.',
+      'Top upregulated genes are queried against the STRING database to map protein–protein interaction networks. High-confidence partners are scored and cross-referenced against a curated oncogene list — surfacing which of your hits are wired into known disease driver networks and which connections are therapeutically exploitable.',
   },
   {
     n: 3,
@@ -36,7 +36,7 @@ const STEPS = [
     n: 6,
     label: 'Report Generation',
     detail:
-      'A publication-style report covers all findings: executive summary, targets ranked by novelty score, proposed mechanisms, and recommended follow-up experiments including suggested assays and validation approaches. Displayed inline and fully copyable — designed to slot into grant writing or lab notebooks.',
+      'A publication-style report covers all findings: executive summary, targets ranked by novelty score, proposed mechanisms, and recommended follow-up experiments including suggested assays and validation approaches. Displayed inline and fully copyable for grant writing or lab notebooks.',
   },
 ]
 
@@ -55,128 +55,138 @@ const FIELD_DOCS = [
   },
   {
     field: 'Sample Conditions',
-    doc: 'Maps each column header from your matrix to a condition label. Names are case-sensitive. Use "Paste from spreadsheet" to import a two-column list directly from Excel or Google Sheets.',
+    doc: 'Maps each column header from your matrix to a condition label. Names are case-sensitive. Use "Paste from spreadsheet" to import a two-column list from Excel or Google Sheets.',
   },
 ]
 
-// rough per-step row height so the bubble arrow tracks the circle vertically
-const ROW_HEIGHT_INACTIVE = 44   // px — circle(32) + gap
-const ROW_HEIGHT_ACTIVE   = 44
-
 export default function AnalyzePage() {
   const [activeStep, setActiveStep] = useState(null)
+  const containerRef  = useRef(null)
+  const circleRefs    = useRef([])
+  const bubbleRef     = useRef(null)
+  const [line, setLine] = useState(null)
+
+  useLayoutEffect(() => {
+    if (!activeStep || !containerRef.current || !bubbleRef.current) {
+      setLine(null)
+      return
+    }
+    const cRect = containerRef.current.getBoundingClientRect()
+    const circ  = circleRefs.current[activeStep - 1]?.getBoundingClientRect()
+    const bub   = bubbleRef.current.getBoundingClientRect()
+    if (!circ) return
+
+    setLine({
+      x1: circ.right  - cRect.left,
+      y1: circ.top    + circ.height / 2 - cRect.top,
+      x2: bub.left    - cRect.left,
+      y2: bub.top     + bub.height / 2  - cRect.top,
+    })
+  }, [activeStep])
 
   const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
-
-  // calculate top offset of the bubble arrow = sum of rows above active
-  const arrowTop = activeStep
-    ? STEPS.slice(0, activeStep - 1).reduce((acc) => acc + ROW_HEIGHT_INACTIVE, 0) + 14
-    : 0
 
   return (
     <div className="space-y-16">
 
-      {/* ── Pipeline walkthrough ─────────────────────────────── */}
-      <div className="relative flex gap-12">
+      {/* ── Pipeline ─────────────────────────────────────────── */}
+      <div ref={containerRef} className="relative flex gap-14 items-stretch">
 
-        {/* Left: step list */}
-        <div className="shrink-0 w-60 flex flex-col">
+        {/* SVG connector */}
+        {line && (
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            style={{ width: '100%', height: '100%', overflow: 'visible' }}
+          >
+            {/* bezier from circle to bubble */}
+            <path
+              d={`M ${line.x1} ${line.y1} C ${line.x1 + 70} ${line.y1}, ${line.x2 - 70} ${line.y2}, ${line.x2} ${line.y2}`}
+              stroke="rgba(251,191,36,0.3)"
+              strokeWidth="1.5"
+              strokeDasharray="5 4"
+              fill="none"
+            />
+            {/* dot at circle */}
+            <circle cx={line.x1} cy={line.y1} r="3.5" fill="rgba(251,191,36,0.55)" />
+            {/* dot at bubble */}
+            <circle cx={line.x2} cy={line.y2} r="3.5" fill="rgba(251,191,36,0.55)" />
+          </svg>
+        )}
+
+        {/* Left: vertical step list */}
+        <div className="shrink-0 w-64 flex flex-col z-10">
           {STEPS.map((step, i) => {
             const isActive = activeStep === step.n
             const isLast   = i === STEPS.length - 1
             return (
-              <div key={step.n}>
-                <div className="flex items-start gap-3">
-                  {/* circle + line */}
-                  <div className="flex flex-col items-center">
-                    <button
-                      type="button"
-                      onClick={() => toggle(step.n)}
-                      style={isActive ? {
-                        boxShadow: '0 0 0 4px rgba(251,191,36,0.12), 0 0 18px rgba(251,191,36,0.22)',
-                      } : {}}
-                      className={`rounded-full font-mono font-bold flex items-center justify-center shrink-0 transition-all duration-300 ${
-                        isActive
-                          ? 'w-11 h-11 text-lg bg-amber-400 text-slate-900'
-                          : 'w-8 h-8 text-sm border border-amber-500/25 text-amber-400/50 hover:text-amber-400 hover:border-amber-400/50'
-                      }`}
-                    >
-                      {step.n}
-                    </button>
-                    {!isLast && (
-                      <div className="flex-1 w-px my-1.5 border-l border-dashed border-slate-800 min-h-[1.25rem]" />
-                    )}
-                  </div>
-
-                  {/* label */}
+              <div key={step.n} className="flex gap-4 items-start">
+                <div className="flex flex-col items-center">
                   <button
+                    ref={el => { circleRefs.current[i] = el }}
                     type="button"
                     onClick={() => toggle(step.n)}
-                    className={`text-left leading-snug transition-all duration-300 ${
+                    style={isActive ? {
+                      boxShadow: '0 0 0 4px rgba(251,191,36,0.15), 0 0 22px rgba(251,191,36,0.28)',
+                    } : {}}
+                    className={`rounded-full font-mono font-bold flex items-center justify-center shrink-0 transition-all duration-300 ${
                       isActive
-                        ? 'text-lg font-semibold text-slate-100 pt-1.5'
-                        : 'text-sm font-medium text-slate-500 hover:text-slate-300 pt-1.5'
+                        ? 'w-12 h-12 text-xl bg-amber-400 text-slate-900'
+                        : 'w-10 h-10 text-base border border-amber-500/30 text-amber-400/55 hover:text-amber-400 hover:border-amber-400/60'
                     }`}
                   >
-                    {step.label}
+                    {step.n}
                   </button>
+                  {!isLast && (
+                    <div className="w-px flex-1 min-h-[1.25rem] border-l border-dashed border-slate-800 my-1.5" />
+                  )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggle(step.n)}
+                  className={`text-left transition-all duration-300 leading-snug ${
+                    isActive
+                      ? 'text-xl font-semibold text-slate-100 pt-2.5'
+                      : 'text-base font-medium text-slate-500 hover:text-slate-300 pt-2.5'
+                  }`}
+                >
+                  {step.label}
+                </button>
               </div>
             )
           })}
         </div>
 
-        {/* Right: speech bubble panel */}
-        <div className="flex-1 relative">
-          {activeStep && (() => {
-            const step = STEPS[activeStep - 1]
-            return (
-              <div
-                className="transition-all duration-300"
-                style={{ paddingTop: `${arrowTop}px` }}
-              >
-                {/* arrow pointing left */}
-                <div
-                  className="w-0 h-0 ml-0 mb-0"
-                  style={{
-                    borderTop: '8px solid transparent',
-                    borderBottom: '8px solid transparent',
-                    borderRight: '10px solid rgb(30 41 59)', // slate-800
-                    marginBottom: '-1px',
-                    marginLeft: '0px',
-                  }}
-                />
-                {/* bubble */}
-                <div className="relative overflow-hidden rounded-xl rounded-tl-none border border-slate-800 bg-slate-900/50 p-6">
-                  {/* large ghost number */}
-                  <span className="absolute right-5 bottom-2 font-mono font-bold text-[7rem] leading-none text-slate-800/25 select-none pointer-events-none">
-                    {step.n}
-                  </span>
-                  {/* step label inside bubble */}
-                  <p className="text-[10px] font-mono uppercase tracking-widest text-amber-400/50 mb-3">
-                    Step {step.n}
-                  </p>
-                  <p className="relative text-sm text-slate-300 leading-loose max-w-prose">
-                    {step.detail}
-                  </p>
-                </div>
+        {/* Right: fixed-position speech bubble */}
+        <div className="flex-1 flex items-center z-10">
+          <div
+            ref={bubbleRef}
+            className="w-full rounded-xl border border-slate-800 bg-slate-900 p-8 flex flex-col justify-center"
+            style={{ minHeight: '260px' }}
+          >
+            {activeStep ? (
+              <div>
+                <p className="text-xs font-mono uppercase tracking-widest text-amber-400/50 mb-4">
+                  Step {activeStep}
+                </p>
+                <p className="text-base text-slate-300 leading-loose">
+                  {STEPS[activeStep - 1].detail}
+                </p>
               </div>
-            )
-          })()}
-
-          {!activeStep && (
-            <div className="h-full flex items-start pt-1.5">
-              <p className="text-sm text-slate-700 italic">Select a step ↑</p>
-            </div>
-          )}
+            ) : (
+              <p className="text-base text-slate-700 text-center">
+                Select a step to see what happens inside the pipeline.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ── New Analysis form ────────────────────────────────── */}
-      <div className="max-w-2xl space-y-6">
-        <div className="border-t border-slate-800 pt-10">
-          <h1 className="text-xl font-semibold text-slate-100 mb-1">New Analysis</h1>
-          <p className="text-sm text-slate-500">
+      <div className="max-w-2xl">
+        <div className="border-t border-slate-800 pt-10 mb-7">
+          <h1 className="text-2xl font-semibold text-slate-100 mb-2">New Analysis</h1>
+          <p className="text-base text-slate-500">
             Upload a count matrix and configure your experiment below.
           </p>
         </div>
@@ -184,13 +194,13 @@ export default function AnalyzePage() {
       </div>
 
       {/* ── Input reference ──────────────────────────────────── */}
-      <div className="max-w-2xl border-t border-slate-800 pt-8">
-        <p className="text-[10px] font-mono uppercase tracking-widest text-slate-600 mb-5">Input reference</p>
-        <div className="space-y-5">
+      <div className="max-w-2xl border-t border-slate-800 pt-10">
+        <p className="text-[10px] font-mono uppercase tracking-widest text-slate-600 mb-6">Input reference</p>
+        <div className="space-y-6">
           {FIELD_DOCS.map(({ field, doc }) => (
             <div key={field} className="flex gap-8">
-              <span className="font-mono text-xs text-amber-400/50 w-36 shrink-0 pt-0.5">{field}</span>
-              <span className="text-sm text-slate-500 leading-relaxed">{doc}</span>
+              <span className="font-mono text-sm text-amber-400/50 w-36 shrink-0 pt-0.5">{field}</span>
+              <span className="text-base text-slate-500 leading-relaxed">{doc}</span>
             </div>
           ))}
         </div>
