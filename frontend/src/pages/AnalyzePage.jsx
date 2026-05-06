@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import UploadForm from '../components/UploadForm.jsx'
 
 const STEPS = [
@@ -59,6 +59,26 @@ const FIELD_DOCS = [
   },
 ]
 
+const EXAMPLE_GENES = [
+  { symbol: 'TGFBI', lfc: '+4.2', padj: '0.0003', novelty: 0.91, dark: true },
+  { symbol: 'MMP9',  lfc: '+3.8', padj: '0.0011', novelty: 0.74, dark: false },
+  { symbol: 'VEGFA', lfc: '+3.1', padj: '0.0024', novelty: 0.48, dark: false },
+]
+
+function NoveltyBar({ score }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full bg-amber-400"
+          style={{ width: `${score * 100}%`, opacity: 0.6 + score * 0.4 }}
+        />
+      </div>
+      <span className="font-mono text-xs text-slate-500 w-8 text-right">{score.toFixed(2)}</span>
+    </div>
+  )
+}
+
 export default function AnalyzePage() {
   const [activeStep, setActiveStep] = useState(null)
   const containerRef = useRef(null)
@@ -66,22 +86,22 @@ export default function AnalyzePage() {
   const bubbleRef    = useRef(null)
   const [line, setLine] = useState(null)
 
-  useLayoutEffect(() => {
-    if (!activeStep || !containerRef.current || !bubbleRef.current) {
-      setLine(null)
-      return
-    }
-    const cRect = containerRef.current.getBoundingClientRect()
-    const lbl   = labelRefs.current[activeStep - 1]?.getBoundingClientRect()
-    const bub   = bubbleRef.current.getBoundingClientRect()
-    if (!lbl) return
-
-    setLine({
-      x1: lbl.right - cRect.left,
-      y1: lbl.top + lbl.height / 2 - cRect.top,
-      x2: bub.left  - cRect.left,
-      y2: bub.top   + bub.height / 2 - cRect.top,
-    })
+  // Measure AFTER the 300 ms transition completes so coordinates are accurate
+  useEffect(() => {
+    if (!activeStep) { setLine(null); return }
+    const id = setTimeout(() => {
+      const cRect = containerRef.current?.getBoundingClientRect()
+      const lbl   = labelRefs.current[activeStep - 1]?.getBoundingClientRect()
+      const bub   = bubbleRef.current?.getBoundingClientRect()
+      if (!cRect || !lbl || !bub) return
+      setLine({
+        x1: lbl.right - cRect.left,
+        y1: lbl.top   + lbl.height / 2 - cRect.top,
+        x2: bub.left  - cRect.left,
+        y2: bub.top   + bub.height / 2 - cRect.top,
+      })
+    }, 310)
+    return () => clearTimeout(id)
   }, [activeStep])
 
   const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
@@ -89,46 +109,29 @@ export default function AnalyzePage() {
   return (
     <div className="space-y-20">
 
-      {/* ── Landing hero ─────────────────────────────────────── */}
+      {/* ── Hero ─────────────────────────────────────────────── */}
       <div className="pt-12 pb-4">
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/50 mb-5">
-          Multi-Omics Agentic Pipeline
-        </p>
         <h1 className="text-5xl font-bold text-slate-100 leading-tight mb-6">
           From count matrix<br />
           <span className="text-amber-400">to drug hypothesis.</span>
         </h1>
-        <p className="text-base text-slate-400 max-w-lg leading-relaxed mb-10">
+        <p className="text-base text-slate-400 max-w-lg leading-relaxed">
           Upload an RNA-seq count matrix and a disease context. The pipeline runs
           differential expression, maps protein interaction networks, mines the
           literature, annotates known drugs, and synthesises ranked hypotheses —
           end to end, without leaving the browser.
         </p>
-        <div className="flex items-center gap-6 text-sm text-slate-600">
-          <span className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 shrink-0" />
-            PyDESeq2 · STRING · PubMed
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 shrink-0" />
-            UniProt · ChEMBL · Pinecone RAG
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 shrink-0" />
-            GPT-4o synthesis
-          </span>
-        </div>
       </div>
 
-      {/* ── Pipeline ─────────────────────────────────────────── */}
+      {/* ── How it works ─────────────────────────────────────── */}
       <div>
         <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-8">
           How it works
         </p>
 
+        {/* w-80 on the left column keeps it fixed-width so the right panel never shifts */}
         <div ref={containerRef} className="relative flex gap-40 items-stretch">
 
-          {/* SVG connector — drawn only after layout is stable */}
           {line && (
             <svg
               className="absolute inset-0 pointer-events-none"
@@ -144,8 +147,7 @@ export default function AnalyzePage() {
             </svg>
           )}
 
-          {/* Left: vertical step list — fixed sizes so nothing reflowing */}
-          <div className="shrink-0 flex flex-col z-10">
+          <div className="shrink-0 w-80 flex flex-col z-10">
             {STEPS.map((step, i) => {
               const isActive = activeStep === step.n
               const isLast   = i === STEPS.length - 1
@@ -158,10 +160,10 @@ export default function AnalyzePage() {
                       style={isActive ? {
                         boxShadow: '0 0 0 4px rgba(251,191,36,0.15), 0 0 22px rgba(251,191,36,0.28)',
                       } : {}}
-                      className={`w-10 h-10 rounded-full font-mono font-bold text-base flex items-center justify-center shrink-0 transition-colors duration-200 ${
+                      className={`rounded-full font-mono font-bold flex items-center justify-center shrink-0 transition-all duration-300 ${
                         isActive
-                          ? 'bg-amber-400 text-slate-900'
-                          : 'border border-amber-500/30 text-amber-400/55 hover:text-amber-400 hover:border-amber-400/60'
+                          ? 'w-12 h-12 text-xl bg-amber-400 text-slate-900'
+                          : 'w-10 h-10 text-base border border-amber-500/30 text-amber-400/55 hover:text-amber-400 hover:border-amber-400/60'
                       }`}
                     >
                       {step.n}
@@ -171,15 +173,14 @@ export default function AnalyzePage() {
                     )}
                   </div>
 
-                  {/* Label — inline-block so getBoundingClientRect tracks actual text width */}
                   <button
                     ref={el => { labelRefs.current[i] = el }}
                     type="button"
                     onClick={() => toggle(step.n)}
-                    className={`inline-block text-left leading-snug whitespace-nowrap pt-2.5 transition-colors duration-200 ${
+                    className={`inline-block text-left leading-snug whitespace-nowrap transition-all duration-300 ${
                       isActive
-                        ? 'text-base font-semibold text-slate-100'
-                        : 'text-base font-medium text-slate-500 hover:text-slate-300'
+                        ? 'text-xl font-semibold text-slate-100 pt-2.5'
+                        : 'text-base font-medium text-slate-500 hover:text-slate-300 pt-2.5'
                     }`}
                   >
                     {step.label}
@@ -189,7 +190,6 @@ export default function AnalyzePage() {
             })}
           </div>
 
-          {/* Right: explanation panel — fixed min-height so it never moves */}
           <div className="flex-1 flex items-center z-10">
             <div
               ref={bubbleRef}
@@ -206,10 +206,72 @@ export default function AnalyzePage() {
                   </p>
                 </div>
               ) : (
-                <p className="text-base text-slate-700 text-center" style={{ marginTop: '80px' }}>
+                <p className="text-base text-slate-700 text-center" style={{ paddingTop: '80px' }}>
                   Select a step to see what happens inside the pipeline.
                 </p>
               )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── Example use-case ─────────────────────────────────── */}
+      <div className="border-t border-slate-800 pt-14">
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-2">Example</p>
+        <h2 className="text-2xl font-semibold text-slate-100 mb-1">KRAS-mutant Pancreatic Cancer</h2>
+        <p className="text-sm text-slate-500 mb-10">
+          18 tumor vs 18 adjacent-normal samples · GEO accession GSE71729
+        </p>
+
+        <div className="grid grid-cols-2 gap-6">
+
+          {/* Top hits */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
+              Top prioritised targets
+            </p>
+            <div className="space-y-5">
+              {EXAMPLE_GENES.map(g => (
+                <div key={g.symbol}>
+                  <div className="flex items-baseline justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-slate-200">{g.symbol}</span>
+                      {g.dark && (
+                        <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-400/60">
+                          dark gene
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs font-mono text-slate-600">
+                      <span>log₂FC {g.lfc}</span>
+                      <span>padj {g.padj}</span>
+                    </div>
+                  </div>
+                  <NoveltyBar score={g.novelty} />
+                  <p className="text-[10px] text-slate-700 mt-1">novelty score</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Sample hypothesis */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 flex flex-col">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
+              Generated hypothesis · TGFBI
+            </p>
+            <p className="text-sm text-slate-400 leading-relaxed flex-1">
+              TGFBI (transforming growth factor β-induced) is markedly upregulated in KRAS-mutant
+              PDAC and physically interacts with integrin αvβ3 to activate downstream FAK/PI3K
+              signalling. No approved small-molecule inhibitors target TGFBI directly, making it
+              a high-novelty candidate. Cross-referencing 31 PubMed abstracts reveals consistent
+              association with stromal remodelling and chemotherapy resistance. Recommended
+              follow-up: siRNA knockdown in PANC-1 cells, co-IP to confirm integrin binding,
+              and patient stratification by TGFBI expression quartile.
+            </p>
+            <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-[10px] font-mono text-slate-700">Novelty score</span>
+              <span className="font-mono text-sm text-amber-400">0.91</span>
             </div>
           </div>
 
