@@ -61,10 +61,9 @@ const FIELD_DOCS = [
 
 export default function AnalyzePage() {
   const [activeStep, setActiveStep] = useState(null)
-  const containerRef  = useRef(null)
-  const circleRefs    = useRef([])
-  const labelRefs     = useRef([])
-  const bubbleRef     = useRef(null)
+  const containerRef = useRef(null)
+  const labelRefs    = useRef([])
+  const bubbleRef    = useRef(null)
   const [line, setLine] = useState(null)
 
   useLayoutEffect(() => {
@@ -79,7 +78,7 @@ export default function AnalyzePage() {
 
     setLine({
       x1: lbl.right - cRect.left,
-      y1: lbl.top   + lbl.height / 2 - cRect.top,
+      y1: lbl.top + lbl.height / 2 - cRect.top,
       x2: bub.left  - cRect.left,
       y2: bub.top   + bub.height / 2 - cRect.top,
     })
@@ -88,101 +87,139 @@ export default function AnalyzePage() {
   const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-20">
+
+      {/* ── Landing hero ─────────────────────────────────────── */}
+      <div className="pt-12 pb-4">
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/50 mb-5">
+          Multi-Omics Agentic Pipeline
+        </p>
+        <h1 className="text-5xl font-bold text-slate-100 leading-tight mb-6">
+          From count matrix<br />
+          <span className="text-amber-400">to drug hypothesis.</span>
+        </h1>
+        <p className="text-base text-slate-400 max-w-lg leading-relaxed mb-10">
+          Upload an RNA-seq count matrix and a disease context. The pipeline runs
+          differential expression, maps protein interaction networks, mines the
+          literature, annotates known drugs, and synthesises ranked hypotheses —
+          end to end, without leaving the browser.
+        </p>
+        <div className="flex items-center gap-6 text-sm text-slate-600">
+          <span className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 shrink-0" />
+            PyDESeq2 · STRING · PubMed
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 shrink-0" />
+            UniProt · ChEMBL · Pinecone RAG
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 shrink-0" />
+            GPT-4o synthesis
+          </span>
+        </div>
+      </div>
 
       {/* ── Pipeline ─────────────────────────────────────────── */}
-      <div ref={containerRef} className="relative flex gap-24 items-stretch">
+      <div>
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-8">
+          How it works
+        </p>
 
-        {/* SVG connector */}
-        {line && (
-          <svg
-            className="absolute inset-0 pointer-events-none"
-            style={{ width: '100%', height: '100%', overflow: 'visible' }}
-          >
-            <path
-              d={`M ${line.x1} ${line.y1} C ${line.x1 + 60} ${line.y1}, ${line.x2 - 60} ${line.y2}, ${line.x2} ${line.y2}`}
-              stroke="rgba(251,191,36,0.18)"
-              strokeWidth="1"
-              fill="none"
-            />
-            <circle cx={line.x2} cy={line.y2} r="2.5" fill="rgba(251,191,36,0.35)" />
-          </svg>
-        )}
+        <div ref={containerRef} className="relative flex gap-40 items-stretch">
 
-        {/* Left: vertical step list */}
-        <div className="shrink-0 w-72 flex flex-col z-10">
-          {STEPS.map((step, i) => {
-            const isActive = activeStep === step.n
-            const isLast   = i === STEPS.length - 1
-            return (
-              <div key={step.n} className="flex gap-4 items-start">
-                <div className="flex flex-col items-center">
+          {/* SVG connector — drawn only after layout is stable */}
+          {line && (
+            <svg
+              className="absolute inset-0 pointer-events-none"
+              style={{ width: '100%', height: '100%', overflow: 'visible' }}
+            >
+              <path
+                d={`M ${line.x1} ${line.y1} C ${line.x1 + 48} ${line.y1}, ${line.x2 - 48} ${line.y2}, ${line.x2} ${line.y2}`}
+                stroke="rgba(251,191,36,0.20)"
+                strokeWidth="1"
+                fill="none"
+              />
+              <circle cx={line.x2} cy={line.y2} r="2.5" fill="rgba(251,191,36,0.40)" />
+            </svg>
+          )}
+
+          {/* Left: vertical step list — fixed sizes so nothing reflowing */}
+          <div className="shrink-0 flex flex-col z-10">
+            {STEPS.map((step, i) => {
+              const isActive = activeStep === step.n
+              const isLast   = i === STEPS.length - 1
+              return (
+                <div key={step.n} className="flex gap-4 items-start">
+                  <div className="flex flex-col items-center">
+                    <button
+                      type="button"
+                      onClick={() => toggle(step.n)}
+                      style={isActive ? {
+                        boxShadow: '0 0 0 4px rgba(251,191,36,0.15), 0 0 22px rgba(251,191,36,0.28)',
+                      } : {}}
+                      className={`w-10 h-10 rounded-full font-mono font-bold text-base flex items-center justify-center shrink-0 transition-colors duration-200 ${
+                        isActive
+                          ? 'bg-amber-400 text-slate-900'
+                          : 'border border-amber-500/30 text-amber-400/55 hover:text-amber-400 hover:border-amber-400/60'
+                      }`}
+                    >
+                      {step.n}
+                    </button>
+                    {!isLast && (
+                      <div className="w-px flex-1 min-h-[1.25rem] border-l border-dashed border-slate-800 my-1.5" />
+                    )}
+                  </div>
+
+                  {/* Label — inline-block so getBoundingClientRect tracks actual text width */}
                   <button
-                    ref={el => { circleRefs.current[i] = el }}
+                    ref={el => { labelRefs.current[i] = el }}
                     type="button"
                     onClick={() => toggle(step.n)}
-                    style={isActive ? {
-                      boxShadow: '0 0 0 4px rgba(251,191,36,0.15), 0 0 22px rgba(251,191,36,0.28)',
-                    } : {}}
-                    className={`rounded-full font-mono font-bold flex items-center justify-center shrink-0 transition-all duration-300 ${
+                    className={`inline-block text-left leading-snug whitespace-nowrap pt-2.5 transition-colors duration-200 ${
                       isActive
-                        ? 'w-12 h-12 text-xl bg-amber-400 text-slate-900'
-                        : 'w-10 h-10 text-base border border-amber-500/30 text-amber-400/55 hover:text-amber-400 hover:border-amber-400/60'
+                        ? 'text-base font-semibold text-slate-100'
+                        : 'text-base font-medium text-slate-500 hover:text-slate-300'
                     }`}
                   >
-                    {step.n}
+                    {step.label}
                   </button>
-                  {!isLast && (
-                    <div className="w-px flex-1 min-h-[1.25rem] border-l border-dashed border-slate-800 my-1.5" />
-                  )}
                 </div>
-
-                <button
-                  ref={el => { labelRefs.current[i] = el }}
-                  type="button"
-                  onClick={() => toggle(step.n)}
-                  className={`text-left transition-all duration-300 leading-snug whitespace-nowrap ${
-                    isActive
-                      ? 'text-xl font-semibold text-slate-100 pt-2.5'
-                      : 'text-base font-medium text-slate-500 hover:text-slate-300 pt-2.5'
-                  }`}
-                >
-                  {step.label}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Right: fixed-position speech bubble */}
-        <div className="flex-1 flex items-center z-10">
-          <div
-            ref={bubbleRef}
-            className="w-full rounded-xl border border-slate-800 bg-slate-900 p-8 flex flex-col justify-center"
-            style={{ minHeight: '260px' }}
-          >
-            {activeStep ? (
-              <div>
-                <p className="text-xs font-mono uppercase tracking-widest text-amber-400/50 mb-4">
-                  Step {activeStep}
-                </p>
-                <p className="text-base text-slate-300 leading-loose">
-                  {STEPS[activeStep - 1].detail}
-                </p>
-              </div>
-            ) : (
-              <p className="text-base text-slate-700 text-center">
-                Select a step to see what happens inside the pipeline.
-              </p>
-            )}
+              )
+            })}
           </div>
+
+          {/* Right: explanation panel — fixed min-height so it never moves */}
+          <div className="flex-1 flex items-center z-10">
+            <div
+              ref={bubbleRef}
+              className="w-full rounded-xl border border-slate-800 bg-slate-900 p-8"
+              style={{ minHeight: '260px' }}
+            >
+              {activeStep ? (
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/50 mb-4">
+                    Step {activeStep}
+                  </p>
+                  <p className="text-base text-slate-300 leading-loose">
+                    {STEPS[activeStep - 1].detail}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-base text-slate-700 text-center" style={{ marginTop: '80px' }}>
+                  Select a step to see what happens inside the pipeline.
+                </p>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
 
       {/* ── New Analysis form ────────────────────────────────── */}
       <div className="max-w-2xl">
         <div className="border-t border-slate-800 pt-10 mb-7">
-          <h1 className="text-2xl font-semibold text-slate-100 mb-2">New Analysis</h1>
+          <h2 className="text-2xl font-semibold text-slate-100 mb-2">New Analysis</h2>
           <p className="text-base text-slate-500">
             Upload a count matrix and configure your experiment below.
           </p>
@@ -192,13 +229,13 @@ export default function AnalyzePage() {
 
       {/* ── Input reference ──────────────────────────────────── */}
       <div className="max-w-2xl border-t border-slate-800 pt-10">
-        <p className="text-[10px] font-mono uppercase tracking-widest text-slate-600 mb-6">Input reference</p>
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-8">Input reference</p>
         <div className="space-y-8">
           {FIELD_DOCS.map(({ field, doc }) => (
             <div key={field} className="flex items-start gap-6">
-              <div className="flex items-center gap-3 w-52 shrink-0 pt-[0.45rem]">
+              <div className="flex items-center gap-3 shrink-0 pt-[0.45rem]">
                 <span className="font-mono text-sm text-amber-400/50 whitespace-nowrap">{field}</span>
-                <div className="flex-1 h-px bg-slate-800" />
+                <div className="w-8 h-px bg-slate-800" />
               </div>
               <span className="text-sm text-slate-500 leading-relaxed">{doc}</span>
             </div>
