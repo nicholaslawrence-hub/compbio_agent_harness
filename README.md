@@ -1,80 +1,86 @@
-# PharmaGPT-Agent
+# PharmaGPT /agent
 
-**Automated Drug-Target Discovery via Multi-Omics Agentic Reasoning**
+An end-to-end drug-target discovery platform. Upload a raw RNA-seq count matrix and a disease context — the pipeline runs differential expression, maps protein interaction networks, mines the biomedical literature, annotates known drugs, and synthesizes ranked therapeutic hypotheses using GPT-4o.
 
-A full-stack AI pipeline that takes raw RNA-seq count matrices, runs bioinformatics analysis, queries biomedical databases, and uses a LangGraph + GPT-4o agent to propose novel therapeutic targets — powered by **Pinecone Assistant** for literature RAG.
-
----
-
-## Architecture
-
-```
-Upload Count Matrix
-       ↓
-[Node 1] DGE Analysis (PyDESeq2 / t-test + BH correction)
-       ↓
-[Node 2] PPI Enrichment (STRING DB) — oncogene tagging
-       ↓
-[Node 3] Literature RAG (Pinecone Assistant) — dark gene classification
-       ↓
-[Node 4] Drug Annotation (ChEMBL + UniProt)
-       ↓
-[Node 5] LLM Hypothesis Synthesis (GPT-4o, Chain-of-Thought)
-       ↓
-[Node 6] Report Generation (Markdown research report)
-```
-
-**LangGraph** orchestrates the pipeline as a directed graph with conditional routing (e.g. skip downstream nodes on DGE failure).
-
-**Pinecone Assistant** replaces raw PubMed queries with semantic search over an indexed biomedical literature corpus, enabling richer dark-gene detection and mechanistic context.
+**Live:** [pharmgpt.vercel.app](https://pharmgpt.vercel.app) &nbsp;·&nbsp; **API:** [compbioagentbackend-production.up.railway.app/docs](https://compbioagentbackend-production.up.railway.app/docs)
 
 ---
 
-## Quick Start
+## Pipeline
 
-### 1. Configure environment
-
-```bash
-cp backend/.env.example backend/.env
-# Edit backend/.env and fill in:
-#   OPENAI_API_KEY
-#   PINECONE_API_KEY
-#   PINECONE_ASSISTANT_NAME  (default: pharmagpt-literature)
-#   NCBI_EMAIL
+```
+Count Matrix + Disease Term
+         ↓
+[1] Differential Expression   PyDESeq2 (negative binomial) or Welch t-test fallback
+         ↓                    Benjamini–Hochberg correction · padj < 0.05, |log₂FC| > 1
+[2] PPI Network               STRING DB · high-confidence partners · oncogene tagging
+         ↓
+[3] Literature RAG            PubMed + Semantic Scholar → Pinecone vector index
+         ↓                    Semantic search per gene · dark gene flagging
+[4] Drug Annotation           UniProt (protein/structure) · ChEMBL (drugs/trials)
+         ↓
+[5] Hypothesis Synthesis      GPT-4o chain-of-thought · mechanism + novelty score 0–1
+         ↓
+[6] Report Generation         Publication-style markdown report · inline + copyable
 ```
 
-### 2. Create the Pinecone Assistant (once)
+Orchestrated as a directed LangGraph graph with conditional routing (e.g. DGE failure skips downstream nodes).
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, Vite, Tailwind CSS, React Router v6 |
+| Backend | FastAPI, uvicorn, LangGraph, LangChain |
+| Bioinformatics | PyDESeq2, SciPy, pandas, NumPy, Biopython |
+| AI | GPT-4o (hypothesis synthesis), Pinecone (literature RAG) |
+| Databases | STRING, PubMed/NCBI, Semantic Scholar, UniProt, ChEMBL |
+| Auth | JWT (python-jose), bcrypt (passlib), SQLAlchemy + SQLite |
+| Deployment | Railway (backend, Docker), Vercel (frontend) |
+
+---
+
+## Local Setup
+
+### Backend
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-PINECONE_API_KEY=<your-key> python ../scripts/setup_pinecone_assistant.py
+cp .env.example .env             # fill in API keys
+uvicorn main:app --reload --port 8000
 ```
 
-### 3. (Optional) Upload literature to the assistant
+Required environment variables:
 
-Upload PDFs or text files of PubMed papers via the API:
+```
+OPENAI_API_KEY=
+PINECONE_API_KEY=
+PINECONE_INDEX_NAME=pharmagpt-literature
+NCBI_EMAIL=you@example.com
+JWT_SECRET=<long-random-string>
+```
+
+### Frontend
+
 ```bash
-curl -X POST http://localhost:8000/api/v1/assistant/upload \
-  -F "files=@paper1.pdf" -F "files=@paper2.pdf"
+cd frontend
+npm install
+npm run dev                      # http://localhost:5173
 ```
 
-### 4. Generate demo data
+The Vite dev server proxies `/api` to `localhost:8000` automatically.
+
+### Demo data
 
 ```bash
 python scripts/generate_demo_data.py
-# Outputs: data/demo_count_matrix.tsv + sample condition JSON
+# → data/demo_count_matrix.tsv + sample condition JSON
 ```
-
-### 5. Start the app
-
-```bash
-bash start.sh
-```
-
-- Frontend: http://localhost:5173  
-- Backend API docs: http://localhost:8000/docs
 
 ---
 
@@ -84,78 +90,104 @@ bash start.sh
 compbio_agent_harness/
 ├── backend/
 │   ├── agents/
-│   │   ├── graph.py          # LangGraph pipeline definition
-│   │   ├── nodes.py          # All 6 pipeline node functions
-│   │   ├── state.py          # AgentState TypedDict schema
-│   │   └── tools_registry.py # LangChain tool wrappers
+│   │   ├── graph.py              # LangGraph pipeline definition
+│   │   ├── nodes.py              # Six pipeline node functions
+│   │   └── state.py              # AgentState TypedDict schema
 │   ├── api/
-│   │   └── routes.py         # FastAPI endpoints + SSE streaming
+│   │   ├── routes.py             # Analysis + gene lookup endpoints
+│   │   └── auth_routes.py        # Register, login, /me, history
 │   ├── db/
-│   │   ├── ncbi.py           # NCBI Entrez (SRA + PubMed fallback)
-│   │   ├── uniprot.py        # UniProt REST client
-│   │   ├── chembl.py         # ChEMBL drug-gene interactions
-│   │   └── pinecone_rag.py   # Pinecone Assistant literature RAG
+│   │   ├── database.py           # SQLAlchemy engine + session
+│   │   ├── user_models.py        # User + JobRecord ORM models
+│   │   ├── ncbi.py               # NCBI Entrez (SRA + PubMed)
+│   │   ├── uniprot.py            # UniProt REST client
+│   │   ├── chembl.py             # ChEMBL drug-gene interactions
+│   │   └── pinecone_rag.py       # Pinecone vector search
 │   ├── tools/
-│   │   ├── dge.py            # DGE: PyDESeq2 + t-test fallback
-│   │   ├── quantification.py # Kallisto / Salmon subprocess wrappers
-│   │   └── ppi.py            # STRING DB PPI network queries
-│   ├── main.py               # FastAPI app + CORS
-│   └── config.py             # Pydantic settings
+│   │   ├── dge.py                # PyDESeq2 + t-test fallback
+│   │   └── ppi.py                # STRING DB PPI queries
+│   ├── auth.py                   # JWT creation/verification, bcrypt
+│   ├── main.py                   # FastAPI app entry point
+│   └── config.py                 # Pydantic settings
 ├── frontend/
 │   └── src/
+│       ├── contexts/
+│       │   └── AuthContext.jsx   # Auth state, login/register/logout
 │       ├── pages/
-│       │   ├── AnalyzePage.jsx   # Upload form + feature overview
+│       │   ├── AnalyzePage.jsx   # Landing page
+│       │   ├── RunPage.jsx       # Upload form
 │       │   ├── ResultsPage.jsx   # Live progress + tabbed results
-│       │   └── GeneLookupPage.jsx # Single-gene deep-dive
-│       └── components/
-│           ├── UploadForm.jsx    # Drag-and-drop + sample annotator
-│           ├── HypothesisCard.jsx # Therapeutic hypothesis display
-│           ├── DGETable.jsx      # Sortable DGE results table
-│           ├── VolcanoPlot.jsx   # Interactive volcano plot
-│           └── ProgressBar.jsx  # Pipeline stage tracker
+│       │   ├── GeneLookupPage.jsx# Single-gene deep-dive
+│       │   ├── LoginPage.jsx     # Sign in / create account
+│       │   └── AccountPage.jsx   # Profile + analysis history
+│       ├── components/
+│       │   ├── Layout.jsx        # Navbar + footer
+│       │   ├── UploadForm.jsx    # Drag-and-drop + sample annotator
+│       │   ├── HypothesisCard.jsx# Therapeutic hypothesis display
+│       │   ├── DGETable.jsx      # Sortable DGE results table
+│       │   └── VolcanoPlot.jsx   # Interactive volcano plot
+│       └── utils/
+│           └── api.js            # Fetch wrappers + auth header
 ├── scripts/
-│   ├── generate_demo_data.py    # Synthetic GBM count matrix
-│   └── setup_pinecone_assistant.py # One-time Pinecone setup
-└── data/
-    ├── raw/                     # Uploaded count matrices
-    ├── processed/               # Intermediate outputs
-    └── results/                 # Final reports
+│   └── generate_demo_data.py     # Synthetic count matrix generator
+├── Dockerfile                    # Backend container (Railway)
+├── railway.toml
+└── vercel.json
 ```
 
 ---
 
 ## API Reference
 
+### Analysis
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v1/analyze` | Start pipeline (multipart: file + metadata) |
-| `GET` | `/api/v1/jobs/{id}` | Poll job status + results |
-| `GET` | `/api/v1/jobs/{id}/stream` | SSE progress stream |
+| `POST` | `/api/v1/analyze` | Start pipeline · multipart form (matrix file + metadata) |
+| `GET` | `/api/v1/jobs/{id}` | Poll job status and results |
+| `GET` | `/api/v1/jobs/{id}/stream` | SSE real-time progress stream |
 | `GET` | `/api/v1/jobs/{id}/report` | Markdown report |
-| `GET` | `/api/v1/gene/{symbol}/ppi` | STRING DB PPI |
-| `GET` | `/api/v1/gene/{symbol}/uniprot` | UniProt annotation |
-| `GET` | `/api/v1/gene/{symbol}/drugs` | ChEMBL drug interactions |
-| `GET` | `/api/v1/gene/{symbol}/literature` | Pinecone Assistant query |
-| `POST` | `/api/v1/assistant/upload` | Upload PDFs to Pinecone |
+
+### Gene Lookup
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/gene/{symbol}/ppi` | STRING DB protein interaction network |
+| `GET` | `/api/v1/gene/{symbol}/uniprot` | UniProt annotation + structure |
+| `GET` | `/api/v1/gene/{symbol}/drugs` | ChEMBL drugs and clinical trials |
+| `GET` | `/api/v1/gene/{symbol}/pubmed` | PubMed abstracts |
+| `GET` | `/api/v1/gene/{symbol}/literature` | Pinecone semantic search |
 | `GET` | `/api/v1/sra/search?disease=` | NCBI SRA dataset search |
 
----
+### Auth
 
-## Pinecone Assistant Integration
-
-The literature RAG node (`node_literature_rag`) queries the **Pinecone Assistant** with a structured prompt per gene, asking it to:
-
-1. Estimate publication volume (dark gene detection)
-2. Identify known drug interactions from indexed literature
-3. Summarize the mechanism of action
-4. Return key PMIDs as citations
-
-The assistant's response is parsed as JSON and fed directly into the GPT-4o hypothesis synthesis prompt, grounding the LLM's reasoning in real literature.
-
-**Without a Pinecone key**, the system falls back to direct NCBI Entrez PubMed queries automatically.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/auth/register` | Create account · returns JWT |
+| `POST` | `/api/v1/auth/login` | Sign in · returns JWT |
+| `GET` | `/api/v1/auth/me` | Current user (Bearer token) |
+| `GET` | `/api/v1/auth/history` | Analysis history for authenticated user |
 
 ---
 
-## Optional: Fine-tuning with LoRA
+## Deployment
 
-See `scripts/` for a placeholder LoRA fine-tuning script targeting Llama-3 on NCBI metadata. Requires a GPU environment with `transformers` + `peft`.
+### Railway (backend)
+
+1. Connect the repo, set service root to `/` (uses root `Dockerfile`)
+2. Add environment variables: `OPENAI_API_KEY`, `PINECONE_API_KEY`, `NCBI_EMAIL`, `JWT_SECRET`
+
+### Vercel (frontend)
+
+Configured via `vercel.json` — build command `cd frontend && npm install && npm run build`, output `frontend/dist`, SPA rewrite rule included.
+
+Set `VITE_API_BASE` to your Railway backend URL if not using a proxy:
+```
+VITE_API_BASE=https://compbioagentbackend-production.up.railway.app/api/v1
+```
+
+---
+
+## Author
+
+Nicholas Lawrence · [github.com/nicholaslawrence-hub](https://github.com/nicholaslawrence-hub)
