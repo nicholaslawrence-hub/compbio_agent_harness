@@ -193,11 +193,14 @@ export default function AnalyzePage() {
       {/* ── Input reference ──────────────────────────────────── */}
       <div className="max-w-2xl border-t border-slate-800 pt-10">
         <p className="text-[10px] font-mono uppercase tracking-widest text-slate-600 mb-6">Input reference</p>
-        <div className="space-y-6">
+        <div className="space-y-8">
           {FIELD_DOCS.map(({ field, doc }) => (
-            <div key={field} className="flex gap-8">
-              <span className="font-mono text-sm text-amber-400/50 w-36 shrink-0 pt-0.5">{field}</span>
-              <span className="text-base text-slate-500 leading-relaxed">{doc}</span>
+            <div key={field} className="flex items-start gap-6">
+              <div className="flex items-center gap-3 w-52 shrink-0 pt-[0.45rem]">
+                <span className="font-mono text-sm text-amber-400/50 whitespace-nowrap">{field}</span>
+                <div className="flex-1 h-px bg-slate-800" />
+              </div>
+              <span className="text-sm text-slate-500 leading-relaxed">{doc}</span>
             </div>
           ))}
         </div>
