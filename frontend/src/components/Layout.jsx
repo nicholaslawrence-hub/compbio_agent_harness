@@ -1,56 +1,35 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Search, FlaskConical, Dna } from 'lucide-react'
+import { Outlet, NavLink, Link } from 'react-router-dom'
+import { Search, FlaskConical, Dna, Github } from 'lucide-react'
 
 export default function Layout() {
-  const location = useLocation()
-
   return (
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-50 bg-slate-950">
-        {/* amber hairline accent */}
         <div className="h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <Dna size={18} className="text-amber-400" strokeWidth={1.5} />
-            <span className="font-semibold text-slate-100 tracking-tight">
+        <div className="max-w-5xl mx-auto px-6 h-20 flex items-center justify-between">
+
+          {/* Logo — clicks back to home */}
+          <Link to="/" className="flex items-center gap-3 group">
+            <Dna size={22} className="text-amber-400" strokeWidth={1.5} />
+            <span className="font-semibold text-lg text-slate-100 tracking-tight group-hover:text-white transition-colors duration-150">
               Pharma<span className="text-amber-400">GPT</span>
-              <span className="text-slate-600 font-light ml-1 text-sm">/agent</span>
+              <span className="text-slate-600 font-light ml-1.5 text-base">/agent</span>
             </span>
-          </div>
+          </Link>
 
           {/* Nav */}
-          <nav className="flex items-center">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `relative flex items-center gap-2 px-4 py-1.5 text-sm font-medium transition-colors duration-150 ${
-                  isActive ? 'text-slate-100' : 'text-slate-500 hover:text-slate-300'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <FlaskConical size={13} strokeWidth={isActive ? 2 : 1.5} />
-                  Analyze
-                  {isActive && (
-                    <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
-                  )}
-                </>
-              )}
-            </NavLink>
+          <nav className="flex items-center gap-2">
             <NavLink
               to="/gene/EGFR"
               className={({ isActive }) =>
-                `relative flex items-center gap-2 px-4 py-1.5 text-sm font-medium transition-colors duration-150 ${
+                `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
                   isActive ? 'text-slate-100' : 'text-slate-500 hover:text-slate-300'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  <Search size={13} strokeWidth={isActive ? 2 : 1.5} />
+                  <Search size={14} strokeWidth={isActive ? 2 : 1.5} />
                   Gene Lookup
                   {isActive && (
                     <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
@@ -58,15 +37,39 @@ export default function Layout() {
                 </>
               )}
             </NavLink>
+            <NavLink
+              to="/run"
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 ${
+                  isActive
+                    ? 'bg-amber-400 text-slate-900'
+                    : 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+                }`
+              }
+            >
+              Run Analysis
+            </NavLink>
           </nav>
         </div>
-        {/* bottom separator */}
         <div className="h-px bg-slate-800/80" />
       </header>
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
         <Outlet />
       </main>
+
+      <footer className="max-w-5xl mx-auto w-full px-6 py-6 flex items-center justify-between border-t border-slate-800/60">
+        <span className="text-xs text-slate-700">PharmaGPT /agent</span>
+        <a
+          href="https://github.com/nicholaslawrence-hub/compbio_agent_harness"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-300 transition-colors duration-150"
+        >
+          <Github size={13} strokeWidth={1.5} />
+          nicholaslawrence-hub
+        </a>
+      </footer>
     </div>
   )
 }

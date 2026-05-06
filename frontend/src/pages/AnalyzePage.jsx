@@ -1,5 +1,7 @@
 import { useState, useRef, useLayoutEffect, useEffect } from 'react'
-import UploadForm from '../components/UploadForm.jsx'
+import { useNavigate } from 'react-router-dom'
+
+const TYPED_TEXT = 'drug hypothesis.'
 
 const STEPS = [
   {
@@ -40,24 +42,6 @@ const STEPS = [
   },
 ]
 
-const FIELD_DOCS = [
-  {
-    field: 'Count Matrix',
-    doc: 'TSV or CSV — rows are genes, columns are samples. Raw integer counts give the best results with DESeq2. TPM or FPKM falls back to a Welch t-test with BH correction automatically.',
-  },
-  {
-    field: 'Disease / Study',
-    doc: 'Free-text context, e.g. "Glioblastoma" or "KRAS-mutant PDAC". Injected into PubMed queries and the LLM prompt to anchor literature retrieval and hypothesis generation to your biology.',
-  },
-  {
-    field: 'Case / Control labels',
-    doc: 'Must exactly match the condition strings assigned to samples. Fold-change is always computed as case ÷ control.',
-  },
-  {
-    field: 'Sample Conditions',
-    doc: 'Maps each column header from your matrix to a condition label. Names are case-sensitive. Use "Paste from spreadsheet" to import a two-column list from Excel or Google Sheets.',
-  },
-]
 
 const EXAMPLE_GENES = [
   { symbol: 'TGFBI', lfc: '+4.2', padj: '0.0003', novelty: 0.91 },
@@ -73,29 +57,16 @@ const HYPOTHESIS_TEXT =
   'and chemotherapy resistance. Recommended follow-up: siRNA knockdown in PANC-1 cells, co-IP ' +
   'to confirm integrin binding, and patient stratification by TGFBI expression quartile.'
 
-// Fires callback once when the element enters the viewport
-function useInView(ref, options = {}) {
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    if (!ref.current) return
-    const obs = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setVisible(true); obs.disconnect() }
-    }, { threshold: 0.15, ...options })
-    obs.observe(ref.current)
-    return () => obs.disconnect()
-  }, [ref])
-  return visible
-}
 
 function AnimatedBar({ score, visible }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-px bg-slate-800 rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full bg-amber-400 transition-all duration-700 ease-out"
+          className="h-full rounded-full bg-amber-400 transition-all duration-1000 ease-out"
           style={{
             width: visible ? `${score * 100}%` : '0%',
-            opacity: visible ? (0.55 + score * 0.45) : 0,
+            opacity: visible ? (0.5 + score * 0.5) : 0,
           }}
         />
       </div>
@@ -111,10 +82,10 @@ function WhisperText({ text, visible }) {
       {words.map((word, i) => (
         <span
           key={i}
-          className="transition-opacity duration-300"
+          className="transition-opacity duration-500"
           style={{
             opacity: visible ? 1 : 0,
-            transitionDelay: visible ? `${i * 22}ms` : '0ms',
+            transitionDelay: visible ? `${i * 55}ms` : '0ms',
           }}
         >
           {word}{' '}
@@ -125,13 +96,13 @@ function WhisperText({ text, visible }) {
 }
 
 export default function AnalyzePage() {
+  const navigate = useNavigate()
   const [activeStep, setActiveStep] = useState(null)
   const containerRef = useRef(null)
   const labelRefs    = useRef([])
   const bubbleRef    = useRef(null)
   const [line, setLine] = useState(null)
 
-  // Instant measurement via RAF — one frame after DOM mutation, no perceptible delay
   useLayoutEffect(() => {
     if (!activeStep) { setLine(null); return }
     const raf = requestAnimationFrame(() => {
@@ -151,32 +122,130 @@ export default function AnalyzePage() {
 
   const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
 
-  // Scroll-triggered visibility for the example section
+  // Typing animation
+  const [typedCount, setTypedCount] = useState(0)
+  const typingDone = typedCount >= TYPED_TEXT.length
+  useEffect(() => {
+    if (typingDone) return
+    const delay = typedCount === 0 ? 700 : 68
+    const id = setTimeout(() => setTypedCount(c => c + 1), delay)
+    return () => clearTimeout(id)
+  }, [typedCount, typingDone])
+
+  // Scroll-driven example animation
   const exampleRef = useRef(null)
-  const exampleVisible = useInView(exampleRef)
+  const [scrollProgress, setScrollProgress] = useState(0)
+  const exampleVisible = scrollProgress > 0.55
+
+  useEffect(() => {
+    let raf
+    const update = () => {
+      if (!exampleRef.current) return
+      const rect = exampleRef.current.getBoundingClientRect()
+      const wh   = window.innerHeight
+      const progress = Math.max(0, Math.min(1, (wh - rect.top) / (wh * 0.65)))
+      setScrollProgress(progress)
+    }
+    const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(update) }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    update()
+    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
+  }, [])
 
   return (
-    <div className="space-y-20">
+    <div className="space-y-24">
 
       {/* ── Hero ─────────────────────────────────────────────── */}
-      <div className="pt-12 pb-4">
-        <h1 className="text-5xl font-bold text-slate-100 leading-tight mb-6">
+      <div className="pt-16 pb-4">
+        <h1 className="text-8xl font-bold text-slate-100 leading-[1.06] mb-8 tracking-tight">
           From count matrix<br />
-          <span className="text-amber-400">to drug hypothesis.</span>
+          <span className="text-amber-400">
+            to{' '}
+            {TYPED_TEXT.slice(0, typedCount)}
+            <span className={`inline-block w-[3px] transition-opacity duration-500 ${typingDone ? 'opacity-0' : 'cursor-blink'}`}>_</span>
+          </span>
         </h1>
-        <p className="text-base text-slate-400 max-w-lg leading-relaxed">
+        <p className="text-lg text-slate-400 max-w-xl leading-relaxed">
           Upload an RNA-seq count matrix and a disease context. The pipeline runs
           differential expression, maps protein interaction networks, mines the
-          literature, annotates known drugs, and synthesizes ranked hypotheses —
+          literature, annotates known drugs, and synthesizes ranked hypotheses
           end to end, without leaving the browser.
         </p>
+        <div className="flex justify-center mt-20">
+          <button
+            onClick={() => navigate('/run')}
+            className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-2xl px-24 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+          >
+            Start Analysis
+          </button>
+        </div>
       </div>
 
-      {/* ── How it works ─────────────────────────────────────── */}
-      <div>
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-8">
-          How it works
+      {/* ── Example use-case ─────────────────────────────────── */}
+      <div ref={exampleRef}>
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-2"
+          style={{ opacity: scrollProgress }}>
+          KRAS-mutant Pancreatic Cancer · GEO GSE71729
         </p>
+
+        <div className="grid grid-cols-2 gap-6">
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6"
+            style={{
+              opacity: scrollProgress,
+              transform: `translateX(${(1 - scrollProgress) * -60}px)`,
+            }}>
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-6">
+              Top prioritized targets
+            </p>
+            <div className="space-y-6">
+              {EXAMPLE_GENES.map(g => (
+                <div key={g.symbol}>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-200">{g.symbol}</span>
+                    <div className="flex items-center gap-4 text-xs font-mono text-slate-600">
+                      <span>log₂FC {g.lfc}</span>
+                      <span>padj {g.padj}</span>
+                    </div>
+                  </div>
+                  <AnimatedBar score={g.novelty} visible={exampleVisible} />
+                  <p className="text-[10px] text-slate-700 mt-1.5">novelty score</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 flex flex-col"
+            style={{
+              opacity: scrollProgress,
+              transform: `translateX(${(1 - scrollProgress) * 60}px)`,
+            }}>
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
+              Generated hypothesis · TGFBI
+            </p>
+            <div className="flex-1">
+              <WhisperText text={HYPOTHESIS_TEXT} visible={exampleVisible} />
+            </div>
+            <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-[10px] font-mono text-slate-700">Novelty score</span>
+              <span
+                className="font-mono text-sm text-amber-400 transition-opacity duration-700"
+                style={{
+                  opacity: exampleVisible ? 1 : 0,
+                  transitionDelay: `${HYPOTHESIS_TEXT.split(' ').length * 55 + 200}ms`,
+                }}
+              >
+                0.91
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── Data Pipeline ────────────────────────────────────── */}
+      <div className="border-t border-slate-800 pt-14">
+        <p className="text-2xl font-semibold text-slate-400 mb-10">Data Pipeline</p>
 
         <div ref={containerRef} className="relative flex gap-40 items-stretch">
 
@@ -195,7 +264,6 @@ export default function AnalyzePage() {
             </svg>
           )}
 
-          {/* Fixed-width column prevents the right panel from shifting */}
           <div className="shrink-0 w-80 flex flex-col z-10">
             {STEPS.map((step, i) => {
               const isActive = activeStep === step.n
@@ -228,8 +296,8 @@ export default function AnalyzePage() {
                     onClick={() => toggle(step.n)}
                     className={`inline-block text-left leading-snug whitespace-nowrap transition-all duration-300 ${
                       isActive
-                        ? 'text-xl font-semibold text-slate-100 pt-2.5'
-                        : 'text-base font-medium text-slate-500 hover:text-slate-300 pt-2.5'
+                        ? 'text-2xl font-semibold text-slate-100 pt-2'
+                        : 'text-lg font-medium text-slate-500 hover:text-slate-300 pt-2'
                     }`}
                   >
                     {step.label}
@@ -242,10 +310,12 @@ export default function AnalyzePage() {
           <div className="flex-1 flex items-center z-10">
             <div
               ref={bubbleRef}
-              className="w-full rounded-xl border border-slate-800 bg-slate-900 p-8"
+              className={`w-full rounded-xl p-8 transition-all duration-300 ${
+                activeStep ? 'border border-slate-800 bg-slate-900' : 'border border-transparent bg-transparent'
+              }`}
               style={{ minHeight: '260px' }}
             >
-              {activeStep ? (
+              {activeStep && (
                 <div>
                   <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/50 mb-4">
                     Step {activeStep}
@@ -254,10 +324,6 @@ export default function AnalyzePage() {
                     {STEPS[activeStep - 1].detail}
                   </p>
                 </div>
-              ) : (
-                <p className="text-base text-slate-700 text-center" style={{ paddingTop: '80px' }}>
-                  Select a step to see what happens inside the pipeline.
-                </p>
               )}
             </div>
           </div>
@@ -265,94 +331,14 @@ export default function AnalyzePage() {
         </div>
       </div>
 
-      {/* ── Example use-case ─────────────────────────────────── */}
-      <div
-        ref={exampleRef}
-        className="border-t border-slate-800 pt-14 transition-all duration-700 ease-out"
-        style={{
-          opacity:   exampleVisible ? 1 : 0,
-          transform: exampleVisible ? 'translateY(0)' : 'translateY(20px)',
-        }}
-      >
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-2">Example</p>
-        <h2 className="text-2xl font-semibold text-slate-100 mb-1">
-          KRAS-mutant Pancreatic Cancer
-        </h2>
-        <p className="text-sm text-slate-500 mb-10">
-          18 tumor vs 18 adjacent-normal samples · GEO accession GSE71729
-        </p>
-
-        <div className="grid grid-cols-2 gap-6">
-
-          {/* Top hits */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-6">
-              Top prioritized targets
-            </p>
-            <div className="space-y-6">
-              {EXAMPLE_GENES.map(g => (
-                <div key={g.symbol}>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <span className="text-sm font-semibold text-slate-200">{g.symbol}</span>
-                    <div className="flex items-center gap-4 text-xs font-mono text-slate-600">
-                      <span>log₂FC {g.lfc}</span>
-                      <span>padj {g.padj}</span>
-                    </div>
-                  </div>
-                  <AnimatedBar score={g.novelty} visible={exampleVisible} />
-                  <p className="text-[10px] text-slate-700 mt-1.5">novelty score</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sample hypothesis */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 flex flex-col">
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
-              Generated hypothesis · TGFBI
-            </p>
-            <div className="flex-1">
-              <WhisperText text={HYPOTHESIS_TEXT} visible={exampleVisible} />
-            </div>
-            <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] font-mono text-slate-700">Novelty score</span>
-              <span
-                className="font-mono text-sm text-amber-400 transition-opacity duration-500"
-                style={{ opacity: exampleVisible ? 1 : 0, transitionDelay: '1400ms' }}
-              >
-                0.91
-              </span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* ── New Analysis form ────────────────────────────────── */}
-      <div className="max-w-2xl">
-        <div className="border-t border-slate-800 pt-10 mb-7">
-          <h2 className="text-2xl font-semibold text-slate-100 mb-2">New Analysis</h2>
-          <p className="text-base text-slate-500">
-            Upload a count matrix and configure your experiment below.
-          </p>
-        </div>
-        <UploadForm />
-      </div>
-
-      {/* ── Input reference ──────────────────────────────────── */}
-      <div className="max-w-2xl border-t border-slate-800 pt-10">
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-8">Input reference</p>
-        <div className="space-y-8">
-          {FIELD_DOCS.map(({ field, doc }) => (
-            <div key={field} className="flex items-start gap-6">
-              <div className="flex items-center gap-3 shrink-0 pt-[0.45rem]">
-                <span className="font-mono text-sm text-amber-400/50 whitespace-nowrap">{field}</span>
-                <div className="w-8 h-px bg-slate-800" />
-              </div>
-              <span className="text-sm text-slate-500 leading-relaxed">{doc}</span>
-            </div>
-          ))}
-        </div>
+      {/* ── CTA footer ───────────────────────────────────────── */}
+      <div className="border-t border-slate-800 pt-14 pb-16 flex items-center justify-center">
+        <button
+          onClick={() => navigate('/run')}
+          className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-20 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
+        >
+          Start Analysis
+        </button>
       </div>
 
     </div>
