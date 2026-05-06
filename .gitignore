@@ -3,7 +3,6 @@
 *.env
 .env.local
 .env.production
-backend/Procfile
 
 # Python
 __pycache__/
