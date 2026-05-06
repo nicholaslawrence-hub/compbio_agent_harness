@@ -13,10 +13,10 @@ class Settings(BaseSettings):
     pinecone_index_name: str = "pharmagpt-literature"
     pinecone_namespace: str = "abstracts"
 
-    data_dir: Path = Path("../data")
-    raw_dir: Path = Path("../data/raw")
-    processed_dir: Path = Path("../data/processed")
-    results_dir: Path = Path("../data/results")
+    data_dir: Path = Path("/tmp/pharmagt")
+    raw_dir: Path = Path("/tmp/pharmagt/raw")
+    processed_dir: Path = Path("/tmp/pharmagt/processed")
+    results_dir: Path = Path("/tmp/pharmagt/results")
 
     max_genes_for_rag: int = 20
     pubmed_max_results: int = 5
