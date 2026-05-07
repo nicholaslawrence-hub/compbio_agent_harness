@@ -1,7 +1,7 @@
 const BASE = import.meta.env.VITE_API_BASE || '/api/v1'
 
 function authHeader() {
-  const token = localStorage.getItem('pharmagpt_token')
+  const token = localStorage.getItem('rnagent_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -17,12 +17,6 @@ export async function startAnalysis(formData) {
 
 export async function getJobStatus(jobId) {
   const res = await fetch(`${BASE}/jobs/${jobId}`)
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
-}
-
-export async function getReport(jobId) {
-  const res = await fetch(`${BASE}/jobs/${jobId}/report`)
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
