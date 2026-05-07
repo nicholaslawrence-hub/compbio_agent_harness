@@ -3,7 +3,7 @@ import requests
 from functools import lru_cache
 
 _GQL_URL = "https://api.platform.opentargets.org/api/v4/graphql"
-_TIMEOUT  = 20
+_TIMEOUT  = 30
 
 # ── GraphQL queries ────────────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ query TargetAssociations($ensemblId: String!) {
   target(ensemblId: $ensemblId) {
     approvedSymbol
     approvedName
-    associatedDiseases(enableIndirect: true, size: 200) {
+    associatedDiseases(page: {index: 0, size: 200}) {
       rows {
         disease {
           id
@@ -125,26 +125,48 @@ def get_ot_association(gene_symbol: str, disease_name: str) -> dict:
             .get("rows", [])
         )
 
-        # Find our disease in the returned associations
+        # First try exact EFO ID match, then fall back to name substring match
+        # This handles cases where the disease string is informal (e.g. "KRAS-mutant PDAC")
+        disease_query_lower = disease_name.lower()
+        best_row = None
+        best_score = -1.0
+
         for row in rows:
-            if row.get("disease", {}).get("id") == efo_id:
-                dt = {ds["id"]: round(ds["score"], 4) for ds in row.get("datatypeScores", [])}
-                return {
-                    "gene":                symbol,
-                    "disease":             disease_can or disease_name,
-                    "overall_score":       round(row["score"], 4),
-                    "genetic_association": dt.get("genetic_association", 0.0),
-                    "somatic_mutation":    dt.get("somatic_mutation",    0.0),
-                    "known_drug":          dt.get("known_drug",          0.0),
-                    "affected_pathway":    dt.get("affected_pathway",    0.0),
-                    "literature":          dt.get("literature",          0.0),
-                    "rna_expression":      dt.get("rna_expression",      0.0),
-                    "animal_model":        dt.get("animal_model",        0.0),
-                    "ensembl_id":          ensembl_id,
-                    "efo_id":              efo_id,
-                    "source":              "opentargets",
-                    "error":               None,
-                }
+            d = row.get("disease", {})
+            # Exact EFO ID match — highest priority
+            if d.get("id") == efo_id:
+                best_row = row
+                break
+            # Fuzzy name match — pick the highest-scoring disease whose name
+            # overlaps with our query string
+            d_name_lower = (d.get("name") or "").lower()
+            if any(tok in d_name_lower for tok in disease_query_lower.split() if len(tok) > 3):
+                score = row.get("score", 0.0)
+                if score > best_score:
+                    best_score = score
+                    best_row   = row
+
+        if best_row:
+            dt = {ds["id"]: round(ds["score"], 4) for ds in best_row.get("datatypeScores", [])}
+            matched_disease = best_row.get("disease", {}).get("name") or disease_can or disease_name
+            return {
+                "gene":                symbol,
+                "disease":             matched_disease,
+                "overall_score":       round(best_row["score"], 4),
+                # datatypeScore IDs in OT Platform v4 API:
+                # "clinical" replaces the old "known_drug" key
+                "genetic_association": dt.get("genetic_association", 0.0),
+                "somatic_mutation":    dt.get("somatic_mutation",    0.0),
+                "known_drug":          dt.get("clinical",            dt.get("known_drug", 0.0)),
+                "affected_pathway":    dt.get("affected_pathway",    0.0),
+                "literature":          dt.get("literature",          dt.get("genetic_literature", 0.0)),
+                "rna_expression":      dt.get("rna_expression",      dt.get("expression_atlas", 0.0)),
+                "animal_model":        dt.get("animal_model",        0.0),
+                "ensembl_id":          ensembl_id,
+                "efo_id":              efo_id,
+                "source":              "opentargets",
+                "error":               None,
+            }
 
         # Gene resolves fine but has no association with this disease → score 0
         return {

@@ -1,4 +1,4 @@
-"""ChEMBL drug-gene interaction client -- uses official chembl_webresource_client."""
+"""ChEMBL drug-gene interaction client using chembl_webresource_client."""
 from chembl_webresource_client.new_client import new_client
 
 _target   = new_client.target
@@ -10,105 +10,96 @@ def get_drug_interactions(gene_symbol: str, max_results: int = 10) -> dict:
     """
     Find drugs targeting a gene via ChEMBL.
 
-    Uses target_synonym__icontains (gene-symbol aware) rather than freetext
-    search, which is far more reliable for dark / uncommon genes.
+    Uses target_synonym__icontains for gene-symbol matching, which is reliable
+    for both well-known and dark genes. Prefers human SINGLE PROTEIN targets.
 
-    Returns a dict with:
-      - drugs: list of drug dicts (sorted: approved first, then by pChEMBL)
-      - query_attempted: True (always)
-      - query_found_target: whether a ChEMBL target ID was resolved
-      - query_note: human-readable explanation for LLM context
+    Returns:
+      drugs               – list of drug dicts (approved first, then by pChEMBL)
+      query_attempted     – True always
+      query_found_target  – whether a ChEMBL target was resolved
+      query_note          – human-readable summary for the LLM
     """
     target_id, target_name = _find_target(gene_symbol)
 
     if not target_id:
         return {
-            "gene": gene_symbol,
-            "drugs": [],
-            "query_attempted": True,
+            "gene":               gene_symbol,
+            "drugs":              [],
+            "query_attempted":    True,
             "query_found_target": False,
             "query_note": (
                 f"No ChEMBL SINGLE PROTEIN target found for '{gene_symbol}'. "
                 "This is common for recently characterised or tissue-specific proteins "
-                "that have not yet attracted medicinal chemistry interest -- a genuine "
-                "competitive white space opportunity."
+                "that have not yet attracted medicinal chemistry interest — "
+                "a genuine competitive white space opportunity."
             ),
         }
 
     drugs = _get_activities(target_id, max_results)
     found = len(drugs) > 0
     return {
-        "gene": gene_symbol,
-        "drugs": drugs,
-        "query_attempted": True,
+        "gene":               gene_symbol,
+        "drugs":              drugs,
+        "query_attempted":    True,
         "query_found_target": True,
         "query_note": (
             f"ChEMBL target '{target_name}' ({target_id}) resolved for '{gene_symbol}'. "
-            f"{len(drugs)} bioactive compound(s) with pChEMBL >= 5 (binding assays)."
+            f"{len(drugs)} bioactive compound(s) with pChEMBL ≥ 5 (binding assays)."
             if found else
             f"ChEMBL target '{target_name}' ({target_id}) resolved for '{gene_symbol}' "
-            "but no compounds passed the pChEMBL >= 5 binding-assay filter. "
-            "Approved drugs may exist in clinical databases -- the absence here reflects "
-            "the early-stage nature of this target, not a database error."
+            "but no compounds passed the pChEMBL ≥ 5 binding-assay filter. "
+            "The absence of tool compounds reflects the early-stage nature of this target."
         ),
     }
 
 
-def _find_target(gene_symbol: str) -> tuple:
+def _find_target(gene_symbol: str) -> tuple[str | None, str]:
     """
     Resolve a gene symbol to a ChEMBL SINGLE PROTEIN target ID.
-    Uses target_synonym__icontains for precise gene-symbol matching.
+    Scores candidates and returns the best human SINGLE PROTEIN match.
     Returns (target_chembl_id, pref_name) or (None, "").
     """
     try:
         results = list(
             _target.filter(target_synonym__icontains=gene_symbol)
-            .only(["target_chembl_id", "target_type", "organism", "pref_name"])
+                   .only(["target_chembl_id", "target_type", "organism", "pref_name"])
         )
     except Exception:
         return None, ""
 
-    # Prefer human SINGLE PROTEIN
-    for t in results:
-        if (t.get("target_type") == "SINGLE PROTEIN"
-                and "homo sapiens" in (t.get("organism") or "").lower()):
-            return t["target_chembl_id"], t.get("pref_name", "")
+    if not results:
+        return None, ""
 
-    # Any human target
-    for t in results:
-        if "homo sapiens" in (t.get("organism") or "").lower():
-            return t["target_chembl_id"], t.get("pref_name", "")
+    def _score(t: dict) -> int:
+        is_single = t.get("target_type") == "SINGLE PROTEIN"
+        is_human  = "homo sapiens" in (t.get("organism") or "").lower()
+        return (is_single * 2) + (is_human * 4)
 
-    # Fall back to any SINGLE PROTEIN
-    for t in results:
-        if t.get("target_type") == "SINGLE PROTEIN":
-            return t["target_chembl_id"], t.get("pref_name", "")
-
-    return (results[0]["target_chembl_id"], results[0].get("pref_name", "")) if results else (None, "")
+    ranked = sorted(results, key=_score, reverse=True)
+    best   = ranked[0]
+    return best.get("target_chembl_id"), best.get("pref_name", "")
 
 
 def _get_activities(target_id: str, max_results: int) -> list:
     """
     Retrieve bioactive compounds for a target.
-    - Binding assays only (assay_type=B), pChEMBL >= 5
+    - Binding assays only (assay_type=B), pChEMBL ≥ 5
     - Fetches 100 candidates, de-dupes by molecule, batch-resolves names + max_phase
-    - Sorts: approved drugs (max_phase=4) first, then by pChEMBL descending.
-      This surfaces named approved drugs (e.g. Gefitinib, Erlotinib) before
-      unnamed research tool compounds.
+    - Sorts: approved drugs (max_phase=4) first, then by pChEMBL descending
     """
     try:
         acts = list(
             _activity.filter(
                 target_chembl_id=target_id,
-                assay_type="B",    # binding assays only -- skip ADMET/toxicity
+                assay_type="B",
                 pchembl_value__gte=5,
-            )[:100]                # wide net so sorting surfaces approved drugs
+            )[:100]
         )
     except Exception:
         return []
 
-    # De-duplicate by molecule, keeping the highest pChEMBL record per molecule
-    best = {}
+    # De-duplicate by molecule, keeping highest pChEMBL per molecule
+    best: dict[str, dict] = {}
     for a in acts:
         mol_id = a.get("molecule_chembl_id")
         if not mol_id:
@@ -126,13 +117,15 @@ def _get_activities(target_id: str, max_results: int) -> list:
     if not best:
         return []
 
-    # Batch-resolve molecule names and approval phase in one API call
-    mol_ids = list(best.keys())
-    name_map = {}
+    # Batch-resolve molecule names and approval phase
+    mol_ids   = list(best.keys())
+    name_map  = {}
     phase_map = {}
     try:
-        mols = list(_molecule.filter(molecule_chembl_id__in=mol_ids)
-                    .only(["molecule_chembl_id", "pref_name", "max_phase"]))
+        mols = list(
+            _molecule.filter(molecule_chembl_id__in=mol_ids)
+                     .only(["molecule_chembl_id", "pref_name", "max_phase"])
+        )
         for m in mols:
             mid = m["molecule_chembl_id"]
             name_map[mid]  = m.get("pref_name") or ""
@@ -140,40 +133,21 @@ def _get_activities(target_id: str, max_results: int) -> list:
     except Exception:
         pass
 
-    # Sort: highest approval phase first, then highest pChEMBL
-    def _sort_key(mol_id):
-        phase   = phase_map.get(mol_id, 0)
-        pchembl = float(best[mol_id].get("pchembl_value") or 0)
-        return (-phase, -pchembl)
+    ranked = sorted(
+        mol_ids,
+        key=lambda mid: (-phase_map.get(mid, 0), -float(best[mid].get("pchembl_value") or 0))
+    )
 
-    ranked = sorted(mol_ids, key=_sort_key)
-
-    results = []
-    for mol_id in ranked[:max_results]:
-        a    = best[mol_id]
-        name = name_map.get(mol_id) or mol_id   # fall back to CHEMBL ID only if truly unnamed
-        results.append({
+    return [
+        {
             "molecule_id":    mol_id,
-            "molecule_name":  name,
-            "standard_type":  a.get("standard_type"),
-            "standard_value": a.get("standard_value"),
-            "standard_units": a.get("standard_units"),
-            "pchembl_value":  a.get("pchembl_value"),
+            "molecule_name":  name_map.get(mol_id) or mol_id,
+            "standard_type":  best[mol_id].get("standard_type"),
+            "standard_value": best[mol_id].get("standard_value"),
+            "standard_units": best[mol_id].get("standard_units"),
+            "pchembl_value":  best[mol_id].get("pchembl_value"),
             "max_phase":      phase_map.get(mol_id, 0),
             "target_id":      target_id,
-        })
-
-    return results
-
-
-def get_drug_approvals(molecule_ids: list) -> dict:
-    """Return max_phase (approval status) for each molecule."""
-    results = {}
-    try:
-        mols = list(_molecule.filter(molecule_chembl_id__in=molecule_ids)
-                    .only(["molecule_chembl_id", "max_phase"]))
-        for m in mols:
-            results[m["molecule_chembl_id"]] = str(m.get("max_phase", "unknown"))
-    except Exception:
-        pass
-    return results
+        }
+        for mol_id in ranked[:max_results]
+    ]

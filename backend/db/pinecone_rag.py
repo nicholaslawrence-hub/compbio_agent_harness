@@ -135,26 +135,35 @@ def _upsert_papers(papers: list[dict], gene_symbol: str) -> None:
         })
 
     if records:
-        index.upsert_records(settings.pinecone_namespace, records)
+        index.upsert_records(namespace=settings.pinecone_namespace, records=records)
 
 
 _SCORE_THRESHOLD = 0.45   # drop low-relevance hits before they reach the LLM prompt
+_OVERFETCH_MULTIPLIER = 3  # fetch 3× top_k so threshold filtering still leaves enough hits
 
 
 def _search(query_text: str, gene_symbol: str, top_k: int = 4) -> list[dict]:
-    """Semantic search over the index; Pinecone embeds the query automatically."""
+    """
+    Semantic search over the index; Pinecone embeds the query automatically.
+
+    Over-fetches by _OVERFETCH_MULTIPLIER so that threshold filtering doesn't
+    starve callers — e.g. top_k=4 fetches 12 candidates, keeps the best ≤4
+    that clear the score threshold.  Results are returned sorted by score desc.
+    """
     index = _index()
+    fetch_k = top_k * _OVERFETCH_MULTIPLIER
     results = index.search(
         namespace=settings.pinecone_namespace,
-        query={"top_k": top_k, "inputs": {"text": query_text}},
+        top_k=fetch_k,
+        inputs={"text": query_text},
         fields=["gene", "title", "abstract", "source", "pmid", "doi", "year", "url"],
     )
     hits = []
-    for match in results.get("result", {}).get("hits", []):
-        score = match.get("_score", 0)
+    for match in results.result.hits:
+        score = match.score
         if score < _SCORE_THRESHOLD:
-            continue    # skip low-relevance results — saves tokens in the LLM prompt
-        fields = match.get("fields", {})
+            continue    # drop low-relevance results — saves tokens in the LLM prompt
+        fields = match.fields
         hits.append({
             "score": score,
             "title": fields.get("title", ""),
@@ -165,7 +174,10 @@ def _search(query_text: str, gene_symbol: str, top_k: int = 4) -> list[dict]:
             "year": fields.get("year", ""),
             "url": fields.get("url", ""),
         })
-    return hits
+
+    # Sort by score desc and return at most top_k
+    hits.sort(key=lambda h: h["score"], reverse=True)
+    return hits[:top_k]
 
 
 def _extract_drugs_from_hits(hits: list[dict]) -> list[str]:

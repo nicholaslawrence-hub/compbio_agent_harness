@@ -1,9 +1,162 @@
-"""DepMap CRISPR essentiality queries via the DepMap Portal API."""
+"""DepMap CRISPR essentiality via the DepMap Portal public REST API.
+
+Two-stage approach:
+  1. GET /download/gene_dep_summary  → summary CSV (all genes, all datasets)
+     Columns: Entrez Id, Gene, Dataset, Dependent Cell Lines,
+              Cell Lines with Data, Strongly Selective, Common Essential
+     We cache this once per process and filter client-side.
+
+  2. POST /download/custom           → per-cell-line effect scores for one gene
+     Used when the summary row for a gene is missing (rare / newly added genes).
+     Dataset ID: breadbox/a2a0a725-b585-40c8-8c45-a924f8178656
+                 (CRISPR DepMap Public 26Q1+Score, Chronos)
+"""
+import io
 import requests
+import pandas as pd
 from functools import lru_cache
 
 _BASE    = "https://depmap.org/portal/api"
-_TIMEOUT = 15
+_TIMEOUT = 30
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; RNAgent/1.0)",
+    "Accept":     "text/csv,application/json",
+    "Referer":    "https://depmap.org/portal/",
+}
+
+# CRISPR Chronos dataset ID from the DepMap download catalogue
+_CHRONOS_DATASET_ID = "breadbox/a2a0a725-b585-40c8-8c45-a924f8178656"
+
+# Keywords that identify CRISPR rows in the gene_dep_summary CSV
+_CRISPR_KEYWORDS = {"crispr", "chronos", "crisprgeneffect", "omicsgeneffect"}
+
+_SESSION = requests.Session()
+_SESSION.headers.update(_HEADERS)
+
+# Module-level cache for the summary DataFrame (fetched once per process)
+_SUMMARY_DF: pd.DataFrame | None = None
+
+
+def _load_summary_df() -> pd.DataFrame | None:
+    """Fetch and cache the gene dependency summary CSV."""
+    global _SUMMARY_DF
+    if _SUMMARY_DF is not None:
+        return _SUMMARY_DF
+    try:
+        r = _SESSION.get(f"{_BASE}/download/gene_dep_summary", timeout=_TIMEOUT)
+        r.raise_for_status()
+        df = pd.read_csv(io.StringIO(r.text))
+        # Normalise column names: lowercase + strip
+        df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+        _SUMMARY_DF = df
+        return df
+    except Exception:
+        return None
+
+
+def _find_crispr_row(df: pd.DataFrame, symbol: str) -> pd.Series | None:
+    """Return the CRISPR/Chronos row for a gene from the summary DataFrame."""
+    gene_col = "gene" if "gene" in df.columns else df.columns[1]
+    rows = df[df[gene_col].str.upper() == symbol.upper()]
+    if rows.empty:
+        return None
+
+    # Try to pick the CRISPR row
+    dataset_col = "dataset" if "dataset" in df.columns else None
+    if dataset_col:
+        for _, row in rows.iterrows():
+            ds_val = str(row.get(dataset_col, "")).lower().replace("_", "")
+            if any(kw in ds_val for kw in _CRISPR_KEYWORDS):
+                return row
+
+    # If only one row, return it regardless of dataset label
+    if len(rows) == 1:
+        return rows.iloc[0]
+
+    # Fall back to the first row
+    return rows.iloc[0]
+
+
+def _from_summary_row(symbol: str, row: pd.Series) -> dict:
+    """Build a result dict from a gene_dep_summary row."""
+    dep_lines  = _int_or_none(row.get("dependent_cell_lines"))
+    total_lines = _int_or_none(row.get("cell_lines_with_data"))
+    pct = round(dep_lines / total_lines * 100, 1) if dep_lines and total_lines else None
+
+    return {
+        "gene":                  symbol,
+        "mean_chronos":          None,           # not in summary CSV
+        "percent_dependent":     pct,
+        "dependent_cell_lines":  dep_lines,
+        "total_cell_lines":      total_lines,
+        "is_common_essential":   _bool(row.get("common_essential")),
+        "is_strongly_selective": _bool(row.get("strongly_selective")),
+        "top_lineages":          [],
+        "n_cell_lines":          total_lines,
+        "source":                "depmap_summary",
+        "error":                 None,
+    }
+
+
+def _from_custom_download(symbol: str) -> dict | None:
+    """
+    Fetch per-cell-line Chronos scores for one gene via POST /download/custom
+    and compute summary statistics.
+    """
+    try:
+        r = _SESSION.post(
+            f"{_BASE}/download/custom",
+            params={
+                "datasetId":           _CHRONOS_DATASET_ID,
+                "featureLabels":       symbol,
+                "addCellLineMetadata": "true",
+            },
+            timeout=_TIMEOUT,
+        )
+        if r.status_code != 200:
+            return None
+        df = pd.read_csv(io.StringIO(r.text))
+        # Find the gene column (case-insensitive)
+        gene_col = next((c for c in df.columns if c.upper() == symbol.upper()), None)
+        if not gene_col:
+            return None
+        scores = df[gene_col].dropna().tolist()
+        if not scores:
+            return None
+        return _compute_from_scores(symbol, scores, df)
+    except Exception:
+        return None
+
+
+def _compute_from_scores(symbol: str, scores: list[float], df: pd.DataFrame) -> dict:
+    """Derive summary statistics from a list of Chronos effect scores."""
+    mean_s = sum(scores) / len(scores)
+    n_dep  = sum(1 for s in scores if s < -0.5)
+    pct    = round(n_dep / len(scores) * 100, 1)
+
+    # Extract top lineages if metadata columns are present
+    lineage_col = next((c for c in df.columns if "lineage" in c.lower()), None)
+    top_lins: list[str] = []
+    if lineage_col:
+        gene_col = next((c for c in df.columns if c.upper() == symbol.upper()), None)
+        if gene_col:
+            lin_df = df[[lineage_col, gene_col]].dropna()
+            lin_means = lin_df.groupby(lineage_col)[gene_col].mean().sort_values()
+            top_lins = lin_means.index.tolist()[:5]
+
+    return {
+        "gene":                  symbol,
+        "mean_chronos":          round(mean_s, 3),
+        "percent_dependent":     pct,
+        "dependent_cell_lines":  n_dep,
+        "total_cell_lines":      len(scores),
+        "is_common_essential":   pct > 90,
+        "is_strongly_selective": 10 < pct <= 60,
+        "top_lineages":          top_lins,
+        "n_cell_lines":          len(scores),
+        "source":                "depmap_custom",
+        "error":                 None,
+    }
 
 
 @lru_cache(maxsize=512)
@@ -11,134 +164,60 @@ def get_gene_essentiality(gene_symbol: str) -> dict:
     """
     Return CRISPR Chronos essentiality data for a gene from DepMap.
 
-    Interpretation guide:
-      mean_chronos < -1.0  → strong common essential (proteasome-like; broad toxicity risk)
-      mean_chronos < -0.5  → solid cancer dependency
-      mean_chronos > -0.1  → not essential in most lines
-      is_strongly_selective → essential in a cancer-type subset (best drug target profile)
-      is_common_essential   → essential everywhere (on-target toxicity concern)
+    Score interpretation:
+      is_strongly_selective → essential in a cancer-type subset (best target profile)
+      is_common_essential   → essential in all lines (on-target toxicity concern)
+      percent_dependent     → % of cell lines with Chronos score < -0.5
+      mean_chronos          → average effect score (< -0.5 = solid dependency)
     """
     symbol = gene_symbol.strip().upper()
 
-    # ── Primary: summary_stats endpoint ──────────────────────────────────────
+    # ── Stage 1: summary CSV ─────────────────────────────────────────────────
+    df = _load_summary_df()
+    if df is not None:
+        row = _find_crispr_row(df, symbol)
+        if row is not None:
+            return _from_summary_row(symbol, row)
+
+    # ── Stage 2: per-cell-line custom download ───────────────────────────────
+    result = _from_custom_download(symbol)
+    if result:
+        return result
+
+    return _error_result(symbol, "DepMap data unavailable for this gene")
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _bool(v) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "1", "yes")
+    return bool(v)
+
+
+def _int_or_none(v) -> int | None:
     try:
-        r = requests.get(
-            f"{_BASE}/gene/summary_stats",
-            params={"gene_name": symbol, "dataset_id": "Chronos_Combined"},
-            timeout=_TIMEOUT,
-        )
-        if r.status_code == 200:
-            d = r.json()
-            # Some API versions return top_lineages, some don't
-            lineages = d.get("top_lineages") or d.get("lineages") or []
-            return {
-                "gene":                 symbol,
-                "mean_chronos":         _safe_round(d.get("mean") or d.get("mean_chronos")),
-                "percent_dependent":    _safe_round(d.get("percent_dependent")),
-                "is_common_essential":  bool(d.get("common_essential", False)),
-                "is_strongly_selective":bool(d.get("strongly_selective", False)),
-                "top_lineages":         lineages[:5],
-                "n_cell_lines":         d.get("n_lines") or d.get("count"),
-                "source":               "depmap_summary",
-                "error":                None,
-            }
-    except Exception:
-        pass
-
-    # ── Fallback: raw per-cell-line essentiality ───────────────────────────
-    try:
-        r = requests.get(
-            f"{_BASE}/gene/gene_essentiality",
-            params={"gene_name": symbol},
-            timeout=_TIMEOUT,
-        )
-        if r.status_code == 200:
-            rows = r.json()
-            if isinstance(rows, list) and rows:
-                return _compute_from_raw(symbol, rows)
-    except Exception:
-        pass
-
-    # ── Second fallback: gene info endpoint (basic flags only) ─────────────
-    try:
-        r = requests.get(
-            f"{_BASE}/gene/",
-            params={"gene_name": symbol},
-            timeout=_TIMEOUT,
-        )
-        if r.status_code == 200:
-            d = r.json()
-            return {
-                "gene":                 symbol,
-                "mean_chronos":         None,
-                "percent_dependent":    None,
-                "is_common_essential":  bool(d.get("is_common_essential", False)),
-                "is_strongly_selective":bool(d.get("is_strongly_selective", False)),
-                "top_lineages":         [],
-                "n_cell_lines":         None,
-                "source":               "depmap_info",
-                "error":                None,
-            }
-    except Exception:
-        pass
-
-    return _error_result(symbol, "DepMap API unavailable or gene not found")
-
-
-def _compute_from_raw(symbol: str, rows: list[dict]) -> dict:
-    """Compute summary statistics from per-cell-line Chronos scores."""
-    scores = [
-        r.get("chronos_score") or r.get("score")
-        for r in rows
-        if (r.get("chronos_score") or r.get("score")) is not None
-    ]
-    if not scores:
-        return _error_result(symbol, "No Chronos scores in response")
-
-    mean_s   = sum(scores) / len(scores)
-    n_dep    = sum(1 for s in scores if s < -0.5)
-    pct      = round(n_dep / len(scores) * 100, 1)
-
-    # Collect lineage labels if present
-    lineage_scores: dict[str, list[float]] = {}
-    for r in rows:
-        lin = r.get("lineage") or r.get("cancer_type")
-        sc  = r.get("chronos_score") or r.get("score")
-        if lin and sc is not None:
-            lineage_scores.setdefault(lin, []).append(sc)
-    top_lins = sorted(
-        lineage_scores, key=lambda l: sum(lineage_scores[l]) / len(lineage_scores[l])
-    )[:5]
-
-    return {
-        "gene":                 symbol,
-        "mean_chronos":         round(mean_s, 3),
-        "percent_dependent":    pct,
-        "is_common_essential":  pct > 90,
-        "is_strongly_selective":10 < pct <= 60,
-        "top_lineages":         top_lins,
-        "n_cell_lines":         len(scores),
-        "source":               "depmap_raw",
-        "error":                None,
-    }
-
-
-def _safe_round(v) -> float | None:
-    try:
-        return round(float(v), 3) if v is not None else None
-    except (TypeError, ValueError):
+        s = str(v).strip()
+        if not s or s.lower() == "nan":
+            return None
+        return int(float(s))  # handles "7.0" from CSV floats
+    except (ValueError, TypeError):
         return None
 
 
 def _error_result(symbol: str, error: str) -> dict:
     return {
-        "gene":                 symbol,
-        "mean_chronos":         None,
-        "percent_dependent":    None,
-        "is_common_essential":  False,
-        "is_strongly_selective":False,
-        "top_lineages":         [],
-        "n_cell_lines":         None,
-        "source":               "depmap",
-        "error":                error,
+        "gene":                  symbol,
+        "mean_chronos":          None,
+        "percent_dependent":     None,
+        "dependent_cell_lines":  None,
+        "total_cell_lines":      None,
+        "is_common_essential":   False,
+        "is_strongly_selective": False,
+        "top_lineages":          [],
+        "n_cell_lines":          None,
+        "source":                "depmap",
+        "error":                 error,
     }

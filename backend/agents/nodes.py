@@ -747,7 +747,7 @@ when you have substantive findings for all top genes."""
 # ── Node 6: LLM hypothesis synthesis ────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
-You are PharmaGPT, a senior computational biologist writing drug-target discovery briefs.
+You are RNAgent, a senior computational biologist writing drug-target discovery briefs.
 Each brief should read like it was written by a human scientist who deeply understands THIS
 specific gene — not a template applied to every gene. Vary your opening, vary your framing,
 vary which evidence you foreground. Some genes deserve excitement; some deserve caution; some
@@ -811,42 +811,39 @@ def _novelty_from_pub_count(pub_count: int) -> float:
 
 def node_synthesize_hypotheses(state: AgentState) -> dict:
     """
-    LLM hypothesis synthesis — now informed by the full supervisor investigation history.
+    LLM hypothesis synthesis driven entirely by the supervisor investigation log.
 
-    The supervisor_context contains every round of PPI, literature, and drug queries
-    (including targeted follow-up rounds), so the synthesis prompt is much richer than
-    the initial pre-fetched context alone. This includes:
-    - Targeted literature results from partner-gene queries (e.g. "SBSPON HSDL2")
-    - Drug data for PPI neighbors discovered as proxy targets
-    - Supervisor reasoning that guided the investigation strategy
+    Generates one hypothesis per gene that survived supervisor pruning — no
+    hardcoded count. The supervisor_context already contains rich natural-language
+    summaries of PPI, DepMap, OpenTargets, literature, and drug findings from
+    every iteration, so we use that as the primary evidence rather than re-injecting
+    raw data structures.
     """
-    llm          = _llm()
-    hypotheses   = []
+    llm         = _llm()
     disease_term = state.get("disease_term", "")
+    # Use the pruned gene list — only generate hypotheses for surviving genes
+    top_genes   = state.get("top_genes", [])
+    sup_context = _format_supervisor_context(state)
+    dge_map     = {r["gene"]: r for r in state.get("dge_results", [])}
+    lit_map     = {r["gene"]: r for r in state.get("literature_results", []) if r}
 
-    gene_context    = _build_gene_context(state)
-    dark_genes      = [g for g in state.get("literature_results", []) if g and g.get("is_dark")]
-    pathway_results = state.get("pathway_results", [])
-    sup_context     = _format_supervisor_context(state)
+    hypotheses: list[dict] = []
 
-    # Fetch all PubMed counts in parallel
-    top_context = gene_context[:5]
+    # Fetch PubMed counts in parallel for all surviving genes
     with ThreadPoolExecutor(max_workers=5) as pool:
-        count_futures = {pool.submit(_get_pubmed_count, gd["gene"]): gd for gd in top_context}
-        for fut in as_completed(count_futures):
-            gd = count_futures[fut]
-            pc = fut.result()
-            gd["_pub_count"]     = pc
-            gd["_novelty_score"] = _novelty_from_pub_count(pc)
+        count_futures = {pool.submit(_get_pubmed_count, g): g for g in top_genes}
+        pub_counts    = {count_futures[f]: f.result() for f in as_completed(count_futures)}
 
-    for gene_data in top_context:
-        gene          = gene_data["gene"]
-        novelty_score = gene_data.get("_novelty_score", 0.5)
-        pub_count     = gene_data.get("_pub_count", -1)
+    for gene in top_genes:
+        dge_entry     = dge_map.get(gene, {})
+        lit_entry     = lit_map.get(gene, {})
+        pub_count     = pub_counts.get(gene, -1)
+        novelty_score = _novelty_from_pub_count(pub_count)
+        key_pmids     = lit_entry.get("key_pmids", [])
 
         try:
             prompt = _build_hypothesis_prompt(
-                gene_data, dark_genes, pathway_results, disease_term, sup_context
+                gene, dge_entry, disease_term, sup_context, novelty_score, pub_count, key_pmids
             )
             response = llm.invoke([
                 SystemMessage(content=_SYSTEM_PROMPT),
@@ -861,29 +858,11 @@ def node_synthesize_hypotheses(state: AgentState) -> dict:
                 "mechanism":          "",
                 "novelty_score":      novelty_score,
                 "pub_count":          pub_count,
-                "supporting_evidence":[],
-                "key_pmids":          gene_data.get("literature", {}).get("key_pmids", []),
+                "supporting_evidence": [],
+                "key_pmids":          key_pmids,
             })
 
     return {"hypotheses": hypotheses, "status": "synthesis_complete", "progress": 90}
-
-
-def _build_gene_context(state: AgentState) -> list[dict]:
-    dge_map  = {r["gene"]: r for r in state.get("dge_results", [])}
-    ppi_map  = {r["gene"]: r for r in state.get("ppi_results", [])}
-    lit_map  = {r["gene"]: r for r in state.get("literature_results", [])}
-    drug_map = {r["gene"]: r for r in state.get("drug_interactions", [])}
-
-    results = []
-    for gene in state.get("top_genes", [])[:10]:
-        results.append({
-            "gene": gene,
-            "dge": dge_map.get(gene, {}),
-            "ppi": ppi_map.get(gene, {}),
-            "literature": lit_map.get(gene, {}),
-            "drugs": drug_map.get(gene, {}),
-        })
-    return results
 
 
 def _format_pathways(pathway_results: list[dict]) -> str:
@@ -900,92 +879,59 @@ def _format_pathways(pathway_results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_hypothesis_prompt(gene_data: dict, dark_genes: list, pathway_results: list = None, disease_term: str = "", supervisor_context: str = "") -> str:
-    g = gene_data["gene"]
-    dge = gene_data["dge"]
-    ppi = gene_data["ppi"]
-    lit = gene_data["literature"]
-    drugs = gene_data["drugs"]
-    pub_count     = gene_data.get("_pub_count", -1)
-    novelty_score = gene_data.get("_novelty_score", 0.5)
-
-    lfc_raw  = dge.get("log2FoldChange", "N/A")
-    padj     = dge.get("padj", "N/A")
-    lfc      = f"{lfc_raw:.3f}" if isinstance(lfc_raw, float) else str(lfc_raw)
-
-    # PPI — annotate partners with their top MF term where available
-    ppi_partners = ppi.get("partners", [])
-    partners = []
-    for p in ppi_partners[:6]:
-        name = p.get("partner", "")
-        mf   = p.get("mf_terms", [])
-        partners.append(f"{name} ({mf[0]})" if mf else name)
-    oncogene_partners = [p["partner"] for p in ppi_partners if p.get("is_oncogene")]
-
-    key_pmids = lit.get("key_pmids", [])
-
-    # Drug data
-    chembl_drugs = [d["molecule_name"] for d in drugs.get("drugs", [])]
-    lit_drugs    = lit.get("known_drugs", [])
-    all_drugs    = list(dict.fromkeys(chembl_drugs + lit_drugs))
-    chembl_note  = drugs.get("query_note", "")
-    target_found = drugs.get("query_found_target", False)
-
-    gene_pathways = [
-        p["pathway"] for p in (pathway_results or [])
-        if g in p.get("overlap_genes", [])
-    ]
-    in_pathways   = bool(gene_pathways)
-    pub_count_str = str(pub_count) if pub_count >= 0 else "query failed"
-    disease_label = disease_term.strip() if disease_term.strip() else "the disease"
+def _build_hypothesis_prompt(
+    gene: str,
+    dge_entry: dict,
+    disease_term: str,
+    supervisor_context: str,
+    novelty_score: float,
+    pub_count: int,
+    key_pmids: list,
+) -> str:
+    lfc_raw = dge_entry.get("log2FoldChange", "N/A")
+    padj    = dge_entry.get("padj", "N/A")
+    lfc     = f"{lfc_raw:.3f}" if isinstance(lfc_raw, float) else str(lfc_raw)
+    pub_str = str(pub_count) if pub_count >= 0 else "unknown"
+    disease = disease_term.strip() or "the disease"
 
     return f"""
-Analyze gene **{g}** as a potential therapeutic target in **{disease_label}**.
+Analyze gene **{gene}** as a potential therapeutic target in **{disease}**.
 
-## DGE (supporting_evidence only — do NOT put these numbers in hypothesis)
-- log2 Fold Change: {lfc}  |  Adjusted p-value: {padj}
+## DGE Stats (for supporting_evidence only — do NOT include these numbers in the hypothesis field)
+log2FC = {lfc}  |  padj = {padj}
 
-## Protein-Protein Interactions (STRING DB, high confidence)
-- Partners: {partners if partners else "None retrieved"}
-- Oncogene partners: {oncogene_partners if oncogene_partners else "None"}
+## Novelty (pre-calculated — DO NOT change this value)
+novelty_score = {novelty_score}
+PubMed cancer hits: {pub_str}
 
-## Drug Landscape (ChEMBL)
-- ChEMBL target resolved: {target_found}
-- Compounds: {all_drugs if all_drugs else "none found — treat as competitive white space"}
-- Note: {chembl_note}
+## Agent Network Investigation (primary evidence — this is the full picture; weight it heavily)
+The supervisor directed specialist agents across multiple rounds. All PPI network data,
+DepMap essentiality scores, OpenTargets disease associations, literature findings, and
+drug annotation results are captured in the log below:
 
-## Pathway membership
-Direct overlap in enriched pathway: {gene_pathways if gene_pathways else "None — frame any pathway link via interactor distance"}
-
-## Novelty (pre-calculated — DO NOT change)
-calculated_novelty_score = {novelty_score}
-PubMed cancer hits: {pub_count_str}
-
-## Supervisor Investigation Log
-The agent iteratively refined its investigation through targeted queries. This is the primary
-source of biological context — PPI partner follow-ups, targeted literature searches, proxy
-druggability findings. Weight this heavily:
-{supervisor_context if supervisor_context else "No supervisor context — rely on data above."}
+{supervisor_context if supervisor_context else "No investigation data available — use general biological knowledge."}
 
 ## Task
-Write a discovery brief for **{g}** in **{disease_label}** that a medicinal chemist or grant
-reviewer finds compelling. Lead with what is *surprising or distinctive* about this gene.
-Do not open with "{g} is upregulated X-fold." Find an angle.
+Write a discovery brief for **{gene}** in **{disease}** that a medicinal chemist or grant
+reviewer finds compelling. Lead with what is surprising or distinctive about this gene
+based on the investigation above. Do not open with "{gene} is upregulated X-fold." Find an angle.
 
-PATHWAY RULE: {g} {'is a direct member of: ' + str(gene_pathways) if in_pathways else 'is NOT a direct member of any enriched pathway. If you mention a pathway, you MUST frame it as: "its STRING interactors [name them] are enriched in [pathway]"'}
+MECHANISM: Name at least 2 specific proteins from the PPI findings above. Describe the exact
+molecular event — phosphorylation site, complex assembled/dissociated, transcriptional target.
+Never write "activates downstream signaling" — name the specific molecular change.
 
-MECHANISM: Name >=2 specific proteins from the PPI list. Describe the exact molecular event —
-phosphorylation site, complex assembled/dissociated, transcriptional target. Never write
-"activates downstream signaling" — name the specific molecular change.
+DRUG LANDSCAPE: If the agent network found no drugs, frame it as competitive white space
+and recommend what class of molecule could be developed.
+Never write "Database query returned no results."
 
 Output ONLY valid JSON:
 {{
-  "gene": "{g}",
-  "hypothesis": "<2-4 sentences: biological argument for why {g} matters in {disease_label}. No statistics.>",
-  "mechanism": "<Concrete molecular mechanism naming >=2 PPI partners and a specific molecular event.>",
+  "gene": "{gene}",
+  "hypothesis": "<2-4 sentences: biological argument for why {gene} matters in {disease}. No statistics.>",
+  "mechanism": "<Concrete molecular mechanism naming >=2 proteins and a specific molecular event.>",
   "novelty_score": {novelty_score},
   "pub_count": {pub_count},
-  "supporting_evidence": ["<3-5 evidence points: DGE stats (log2FC={lfc}, padj={padj}), pathway context, PPI oncogene links, literature, drug landscape>"],
+  "supporting_evidence": ["<3-5 evidence points including: DGE stats (log2FC={lfc}, padj={padj}), DepMap/OT scores if retrieved, literature hits, drug landscape>"],
   "key_pmids": {json.dumps(key_pmids)}
 }}
 """
@@ -1027,15 +973,15 @@ def node_generate_report(state: AgentState) -> dict:
     pathways_str = _format_pathways(pathway_results)
 
     prompt = f"""
-You are PharmaGPT. Generate a concise, publication-quality research report in Markdown format.
+You are RNAgent. Generate a concise, publication-quality research report in Markdown format.
 
 Disease context: {disease}
-Top upregulated genes: {state.get("top_genes", [])[:10]}
+Genes investigated (surviving supervisor pruning): {state.get("top_genes", [])}
 
 Enriched pathways (KEGG / GO BP / Reactome):
 {pathways_str}
 
-Therapeutic hypotheses generated by the pipeline:
+Therapeutic hypotheses generated by the agent network:
 {hypotheses_json}
 
 The report should include:
