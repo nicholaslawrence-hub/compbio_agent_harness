@@ -56,10 +56,28 @@ def _parse_sample_conditions(raw: str) -> dict[str, str]:
 
 
 async def _run_pipeline(job_id: str, state: AgentState):
+    def _run_streaming():
+        """Run the graph with stream() so each node's status/progress is reflected live."""
+        accumulated = {**state}
+        for step in get_pipeline().stream(state):
+            for _node_name, node_out in step.items():
+                accumulated.update(node_out)
+                # Push live status + progress back to the job store the SSE stream reads
+                if node_out.get("status"):
+                    _jobs[job_id]["status"] = node_out["status"]
+                if node_out.get("progress") is not None:
+                    _jobs[job_id]["progress"] = node_out["progress"]
+                if node_out.get("errors"):
+                    _jobs[job_id].setdefault("errors", [])
+                    _jobs[job_id]["errors"] = list(
+                        set(_jobs[job_id]["errors"]) | set(node_out["errors"])
+                    )
+        return accumulated
+
     try:
         _jobs[job_id]["status"] = "running"
         _sync_job_status(job_id, "running")
-        final_state = await asyncio.to_thread(get_pipeline().invoke, state)
+        final_state = await asyncio.to_thread(_run_streaming)
         final_status = final_state.get("status", "complete")
         _jobs[job_id].update({
             "status": final_status,
@@ -67,6 +85,8 @@ async def _run_pipeline(job_id: str, state: AgentState):
             "result": {
                 "top_genes": final_state.get("top_genes", []),
                 "dge_results": final_state.get("dge_results", []),
+                "pathway_results": final_state.get("pathway_results", []),
+                "enrichment_method": final_state.get("enrichment_method", ""),
                 "hypotheses": final_state.get("hypotheses", []),
                 "final_report": final_state.get("final_report", ""),
                 "ppi_results": final_state.get("ppi_results", []),
@@ -120,7 +140,11 @@ async def start_analysis(
         "count_matrix_path": str(save_path),
         "sample_conditions": conditions,
         "dge_results": [],
+        "all_dge_results": [],
+        "detected_genes": [],
         "top_genes": [],
+        "enrichment_method": "",
+        "pathway_results": [],
         "ppi_results": [],
         "literature_results": [],
         "drug_interactions": [],

@@ -7,12 +7,23 @@ Flow:
   2. Upsert records into the Pinecone index (text field auto-embedded)
   3. Query the index semantically at analysis time
   4. Return top-k relevant abstracts + synthesized summary via LLM
+
+Token-cost optimisations:
+  - In-memory gene cache: skip re-fetch/re-embed if gene seen in last 2 hours
+  - top_k reduced to 4 (was 6)
+  - Score threshold: only pass hits with _score > 0.5 to the LLM prompt
+  - Abstract text capped at 300 chars in format_for_prompt
 """
 import json
 import hashlib
+import time
 from pinecone import Pinecone
 from config import settings
 from db.literature_fetch import fetch_gene_literature, format_for_prompt
+
+# Simple in-memory cache: {gene_symbol: unix_timestamp_of_last_upsert}
+_upsert_cache: dict[str, float] = {}
+_CACHE_TTL = 7200   # 2 hours
 
 
 def _index():
@@ -35,16 +46,21 @@ def query_literature(gene_symbol: str, context: str = "") -> dict:
     try:
         disease = context.split(".")[0].replace("Disease: ", "") if context else ""
 
-        # Step 1 — fetch abstracts agentically
-        papers = fetch_gene_literature(gene_symbol, disease_context=disease, max_papers=10)
+        # Step 1 — fetch abstracts (skip if recently upserted for this gene)
+        now = time.time()
+        already_cached = (now - _upsert_cache.get(gene_symbol, 0)) < _CACHE_TTL
+        papers = []
+        if not already_cached:
+            papers = fetch_gene_literature(gene_symbol, disease_context=disease, max_papers=6)
 
         # Step 2 — upsert into Pinecone (inference happens server-side)
         if papers:
             _upsert_papers(papers, gene_symbol)
+            _upsert_cache[gene_symbol] = now
 
-        # Step 3 — semantic search
+        # Step 3 — semantic search (top_k=4 for token efficiency)
         query_text = f"{gene_symbol} drug target therapeutic {disease}".strip()
-        hits = _search(query_text, gene_symbol, top_k=6)
+        hits = _search(query_text, gene_symbol, top_k=4)
 
         # Step 4 — classify and return
         pubmed_hits = sum(1 for p in hits if p.get("source") == "PubMed")
@@ -100,7 +116,10 @@ def _upsert_papers(papers: list[dict], gene_symbol: str) -> None:
         index.upsert_records(settings.pinecone_namespace, records)
 
 
-def _search(query_text: str, gene_symbol: str, top_k: int = 6) -> list[dict]:
+_SCORE_THRESHOLD = 0.45   # drop low-relevance hits before they reach the LLM prompt
+
+
+def _search(query_text: str, gene_symbol: str, top_k: int = 4) -> list[dict]:
     """Semantic search over the index; Pinecone embeds the query automatically."""
     index = _index()
     results = index.search(
@@ -110,9 +129,12 @@ def _search(query_text: str, gene_symbol: str, top_k: int = 6) -> list[dict]:
     )
     hits = []
     for match in results.get("result", {}).get("hits", []):
+        score = match.get("_score", 0)
+        if score < _SCORE_THRESHOLD:
+            continue    # skip low-relevance results — saves tokens in the LLM prompt
         fields = match.get("fields", {})
         hits.append({
-            "score": match.get("_score", 0),
+            "score": score,
             "title": fields.get("title", ""),
             "abstract": fields.get("abstract", ""),
             "source": fields.get("source", ""),

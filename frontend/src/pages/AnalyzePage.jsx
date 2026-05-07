@@ -1,5 +1,6 @@
 import { useState, useRef, useLayoutEffect, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { Github, Linkedin, Code2, ExternalLink } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 const PHRASES = [
@@ -15,34 +16,40 @@ const STEPS = [
     n: 1,
     label: 'Differential Expression',
     detail:
-      'Your count matrix is tested gene-by-gene for statistically significant expression changes between case and control. PyDESeq2 applies a negative binomial model with Benjamini–Hochberg correction. Only genes clearing padj < 0.05 and |log₂FC| > 1 feed into downstream steps — everything else is filtered out.',
+      'Your count matrix is tested gene-by-gene for statistically significant expression changes between case and control. PyDESeq2 applies a negative binomial model with Benjamini–Hochberg correction. Only genes clearing padj < 0.05 and |log₂FC| > 1 feed into downstream steps, everything else is filtered out.',
   },
   {
     n: 2,
+    label: 'Pathway Enrichment',
+    detail:
+      'The DEG list is tested against GO Biological Process and KEGG gene sets using a Fisher\'s exact over-representation test — statistically valid on small N where correlation-based methods like WGCNA break down. Significant pathways (padj < 0.05) are ranked and deduplicated by Jaccard overlap. The top 5 — for example "MAPK signaling", "PI3K-AKT pathway", or "cell cycle regulation", are passed directly into the LLM prompt alongside each gene, providing structured biological context before any hypothesis is written.',
+  },
+  {
+    n: 3,
     label: 'Protein Interaction Network',
     detail:
       'Top upregulated genes are queried against the STRING database to map protein–protein interaction networks. High-confidence partners are scored and cross-referenced against a curated oncogene list — surfacing which of your hits are wired into known disease driver networks and which connections are therapeutically exploitable.',
   },
   {
-    n: 3,
+    n: 4,
     label: 'Literature RAG',
     detail:
       'Abstracts are fetched live from PubMed and Semantic Scholar, then upserted into a Pinecone vector index. The index is semantically searched to pull the most relevant passages per gene. Genes returning fewer than three meaningful hits are flagged as dark genes — under-studied targets with a less competitive drug discovery landscape.',
   },
   {
-    n: 4,
+    n: 5,
     label: 'Drug & Protein Annotation',
     detail:
-      'Each gene is looked up in UniProt for functional description and known 3D structures. ChEMBL is then searched for approved and investigational drugs against the same target. Existing drug coverage directly shapes the novelty score in the next step — a well-drugged target scores lower, a dark gene with no compounds scores higher.',
-  },
-  {
-    n: 5,
-    label: 'Hypothesis Synthesis',
-    detail:
-      'GPT-4o receives the combined DGE statistics, PPI context, literature passages, and drug landscape for each prioritized gene. Chain-of-thought reasoning produces a structured hypothesis: proposed mechanism of action, supporting evidence, and a novelty score 0–1. Dark genes connected to oncogene networks with no existing drugs surface at the top.',
+      'Each gene is looked up in UniProt for functional description and known 3D structures. ChEMBL is then searched for approved and investigational drugs against the same target. Existing drug coverage directly shapes the novelty score in the next step, a well-drugged target scores lower, a dark gene with no compounds scores higher.',
   },
   {
     n: 6,
+    label: 'Hypothesis Synthesis',
+    detail:
+      'GPT-5.4-mini receives the combined DGE statistics, pathway context, PPI network, literature passages, and drug landscape for each prioritized gene. Chain-of-thought reasoning produces a structured hypothesis: proposed mechanism of action, supporting evidence, and a novelty score 0–1. Dark genes connected to oncogene networks with no existing drugs surface at the top.',
+  },
+  {
+    n: 7,
     label: 'Report Generation',
     detail:
       'A publication-style report covers all findings: executive summary, targets ranked by novelty score, proposed mechanisms, and recommended follow-up experiments including suggested assays and validation approaches. Displayed inline and fully copyable for grant writing or lab notebooks.',
@@ -56,13 +63,29 @@ const EXAMPLE_GENES = [
   { symbol: 'VEGFA', lfc: '+3.1', padj: '0.0024', novelty: 0.48 },
 ]
 
-const HYPOTHESIS_TEXT =
-  'TGFBI (transforming growth factor β-induced) is markedly upregulated in KRAS-mutant PDAC ' +
-  'and physically interacts with integrin αvβ3 to activate downstream FAK/PI3K signaling. No ' +
-  'approved small-molecule inhibitors target TGFBI directly, making it a high-novelty candidate. ' +
-  'Cross-referencing 31 PubMed abstracts reveals consistent association with stromal remodeling ' +
-  'and chemotherapy resistance. Recommended follow-up: siRNA knockdown in PANC-1 cells, co-IP ' +
-  'to confirm integrin binding, and patient stratification by TGFBI expression quartile.'
+const HYPOTHESIS_TEXTS = {
+  TGFBI:
+    'TGFBI (transforming growth factor β-induced) is markedly upregulated in KRAS-mutant PDAC ' +
+    'and physically interacts with integrin αvβ3 to activate downstream FAK/PI3K signaling. No ' +
+    'approved small-molecule inhibitors target TGFBI directly, making it a high-novelty candidate. ' +
+    'Cross-referencing 31 PubMed abstracts reveals consistent association with stromal remodeling ' +
+    'and chemotherapy resistance. Recommended follow-up: siRNA knockdown in PANC-1 cells, co-IP ' +
+    'to confirm integrin binding, and patient stratification by TGFBI expression quartile.',
+  MMP9:
+    'MMP9 (matrix metallopeptidase 9) drives ECM degradation and is co-expressed with TIMP1, ' +
+    'CD44, and VEGFA in the STRING PPI network. Phase III trials of the anti-MMP9 antibody ' +
+    'andecaliximab failed, suggesting the catalytic domain alone is insufficient. The ITGB1 ' +
+    'interaction node — flagged as high-confidence — offers a co-target opportunity. Proposed ' +
+    'mechanism: dual blockade of MMP9/ITGB1 to simultaneously impair matrix remodeling and ' +
+    'anoikis resistance. Novelty score reflects moderate literature saturation.',
+  VEGFA:
+    'VEGFA is upregulated 3.1-fold and occupies the center of a dense angiogenesis network. ' +
+    'Bevacizumab, ramucirumab, and multiple VEGFR TKIs are already approved, placing this gene ' +
+    'firmly in the low-novelty tier. Included as a pipeline calibration control — the scoring ' +
+    'correctly deprioritizes well-drugged targets regardless of fold-change magnitude. ' +
+    'If your analysis surfaces VEGFA at the top, check whether the disease context is ' +
+    'angiogenesis-specific or if background gene counts are too small.',
+}
 
 
 function AnimatedBar({ score, visible }) {
@@ -82,30 +105,12 @@ function AnimatedBar({ score, visible }) {
   )
 }
 
-function WhisperText({ text, visible }) {
-  const words = text.split(' ')
-  return (
-    <p className="text-sm text-slate-400 leading-relaxed">
-      {words.map((word, i) => (
-        <span
-          key={i}
-          className="transition-opacity duration-500"
-          style={{
-            opacity: visible ? 1 : 0,
-            transitionDelay: visible ? `${i * 55}ms` : '0ms',
-          }}
-        >
-          {word}{' '}
-        </span>
-      ))}
-    </p>
-  )
-}
 
 export default function AnalyzePage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [activeStep, setActiveStep] = useState(null)
+  const [selectedGene, setSelectedGene] = useState(null)
   const containerRef = useRef(null)
   const labelRefs    = useRef([])
   const bubbleRef    = useRef(null)
@@ -157,24 +162,28 @@ export default function AnalyzePage() {
     return () => clearTimeout(id)
   }, [typingPhase, charCount, currentPhrase])
 
-  // Scroll-driven example animation
-  const exampleRef = useRef(null)
-  const [scrollProgress, setScrollProgress] = useState(0)
-  const exampleVisible = scrollProgress > 0.55
+  // Intersection-Observer-driven card entrance
+  const leftCardRef  = useRef(null)
+  const rightCardRef = useRef(null)
+  const [leftIn,  setLeftIn]  = useState(false)
+  const [rightIn, setRightIn] = useState(false)
+  const exampleVisible = leftIn   // drives AnimatedBar
 
   useEffect(() => {
-    let raf
-    const update = () => {
-      if (!exampleRef.current) return
-      const rect = exampleRef.current.getBoundingClientRect()
-      const wh   = window.innerHeight
-      const progress = Math.max(0, Math.min(1, (wh - rect.top) / (wh * 0.65)))
-      setScrollProgress(progress)
-    }
-    const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(update) }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    update()
-    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return
+          if (entry.target === leftCardRef.current)  { setLeftIn(true) }
+          if (entry.target === rightCardRef.current) { setTimeout(() => setRightIn(true), 160) }
+          observer.unobserve(entry.target)  // fire once
+        })
+      },
+      { threshold: 0.12 }
+    )
+    if (leftCardRef.current)  observer.observe(leftCardRef.current)
+    if (rightCardRef.current) observer.observe(rightCardRef.current)
+    return () => observer.disconnect()
   }, [])
 
   return (
@@ -190,7 +199,7 @@ export default function AnalyzePage() {
             <span className="inline-block w-[3px] cursor-blink">_</span>
           </span>
         </h1>
-        <p className="text-lg text-slate-400 max-w-xl leading-relaxed">
+        <p className="text-lg text-slate-200 max-w-xl leading-relaxed">
           Upload an RNA-seq count matrix and a disease context. The pipeline runs
           differential expression, maps protein interaction networks, mines the
           literature, annotates known drugs, and synthesizes ranked hypotheses
@@ -206,80 +215,117 @@ export default function AnalyzePage() {
             </button>
           ) : (
             <>
+              <button
+                onClick={() => navigate('/run')}
+                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight shadow-[0_0_28px_rgba(251,191,36,0.30)]"
+              >
+                Try the Pipeline
+              </button>
               <Link
                 to="/login"
-                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+                className="border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-slate-100 font-semibold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
               >
                 Log in / Sign up
               </Link>
-              <button
-                onClick={() => navigate('/run')}
-                className="border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-slate-100 font-semibold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
-              >
-                Use as Guest
-              </button>
             </>
           )}
         </div>
       </div>
 
       {/* ── Example use-case ─────────────────────────────────── */}
-      <div ref={exampleRef}>
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-2"
-          style={{ opacity: scrollProgress, transform: `translateY(${(1 - scrollProgress) * 80}px)` }}>
-          KRAS-mutant Pancreatic Cancer · GEO GSE71729
-        </p>
-
+      <div>
         <div className="grid grid-cols-2 gap-6">
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6"
-            style={{
-              opacity: scrollProgress,
-              transform: `translateY(${(1 - scrollProgress) * 80}px)`,
-            }}>
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-6">
-              Top prioritized targets
-            </p>
-            <div className="space-y-6">
-              {EXAMPLE_GENES.map(g => (
-                <div key={g.symbol}>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <span className="text-sm font-semibold text-slate-200">{g.symbol}</span>
-                    <div className="flex items-center gap-4 text-xs font-mono text-slate-600">
-                      <span>log₂FC {g.lfc}</span>
-                      <span>padj {g.padj}</span>
+          {/* ── Left: gene list ── */}
+          <div
+            ref={leftCardRef}
+            className={`rounded-xl border border-slate-700 bg-slate-800/70 p-8 border-t-[1.5px] border-t-amber-400/30 transition-all duration-700 ease-out ${
+              leftIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
+            }`}
+          >
+            <div className="space-y-2">
+              {EXAMPLE_GENES.map(g => {
+                const isActive = selectedGene === g.symbol
+                const hasSelection = selectedGene !== null
+                return (
+                  <div
+                    key={g.symbol}
+                    onClick={() => setSelectedGene(g.symbol)}
+                    className={`relative cursor-pointer rounded-xl pl-5 pr-4 py-5 -mx-2 transition-all duration-200 ${
+                      isActive
+                        ? 'bg-amber-400/10'
+                        : hasSelection
+                          ? 'opacity-40 hover:opacity-70 hover:bg-slate-700/30'
+                          : 'hover:bg-slate-700/30 hover:opacity-90'
+                    }`}
+                  >
+                    {/* 3px active left bar */}
+                    <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full transition-all duration-200 ${
+                      isActive ? 'bg-amber-400' : 'bg-transparent'
+                    }`} />
+
+                    {/* Gene name + tabular stats */}
+                    <div className="flex items-baseline justify-between mb-3">
+                      <span className={`text-xl font-bold tracking-tight transition-colors duration-200 ${
+                        isActive ? 'text-white' : 'text-slate-300'
+                      }`}>
+                        {g.symbol}
+                      </span>
+                      <div className="flex font-mono tabular-nums text-sm text-slate-400">
+                        <span className="w-24 text-right">log₂FC {g.lfc}</span>
+                        <span className="w-28 text-right">padj {g.padj}</span>
+                      </div>
                     </div>
+
+                    <AnimatedBar score={g.novelty} visible={exampleVisible} />
+                    <p className="text-xs text-slate-400 mt-2">novelty score</p>
                   </div>
-                  <AnimatedBar score={g.novelty} visible={exampleVisible} />
-                  <p className="text-[10px] text-slate-700 mt-1.5">novelty score</p>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 flex flex-col"
-            style={{
-              opacity: scrollProgress,
-              transform: `translateY(${(1 - scrollProgress) * 80}px)`,
-            }}>
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-5">
-              Generated hypothesis · TGFBI
-            </p>
-            <div className="flex-1">
-              <WhisperText text={HYPOTHESIS_TEXT} visible={exampleVisible} />
-            </div>
-            <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] font-mono text-slate-700">Novelty score</span>
-              <span
-                className="font-mono text-sm text-amber-400 transition-opacity duration-700"
-                style={{
-                  opacity: exampleVisible ? 1 : 0,
-                  transitionDelay: `${HYPOTHESIS_TEXT.split(' ').length * 55 + 200}ms`,
-                }}
-              >
-                0.91
-              </span>
-            </div>
+          {/* ── Right: hypothesis detail ── */}
+          <div
+            ref={rightCardRef}
+            className={`rounded-xl border border-slate-700 bg-slate-800/70 p-8 flex flex-col border-t-[1.5px] border-t-amber-400/30 transition-all duration-700 ease-out ${
+              rightIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
+            }`}
+          >
+
+            {selectedGene === null ? (
+              /* Empty state */
+              <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-8">
+                <div className="text-3xl">←</div>
+                <p className="text-base font-semibold text-slate-300">Click left on a gene</p>
+                <p className="text-sm text-slate-500 max-w-[200px] leading-relaxed">
+                  Select any target on the left to see the generated mechanism and evidence.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Gene name header in detail panel */}
+                <p className="text-xl font-bold text-white mb-1">{selectedGene}</p>
+                <p className="text-xs text-slate-500 mb-5 font-mono">Generated hypothesis</p>
+
+                {/* Scrollable hypothesis text */}
+                <div className="flex-1 overflow-y-auto pr-1" style={{ maxHeight: '200px' }}>
+                  <p
+                    key={selectedGene}
+                    className="text-base text-slate-200 leading-relaxed animate-fade-in"
+                  >
+                    {HYPOTHESIS_TEXTS[selectedGene]}
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between">
+                  <span className="text-sm text-slate-400 font-mono">Novelty score</span>
+                  <span className="font-mono text-lg font-bold text-amber-400">
+                    {EXAMPLE_GENES.find(g => g.symbol === selectedGene)?.novelty.toFixed(2)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
         </div>
@@ -373,33 +419,41 @@ export default function AnalyzePage() {
         </div>
       </div>
 
-      {/* ── CTA footer ───────────────────────────────────────── */}
-      <div className="border-t border-slate-800 pt-14 pb-16 flex items-center justify-center gap-4">
-        {user ? (
-          <button
-            onClick={() => navigate('/run')}
-            className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-20 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
-          >
-            Start Analysis
-          </button>
-        ) : (
-          <>
-            <Link
-              to="/login"
-              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-12 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
-            >
-              Log in / Sign up
-            </Link>
-            <button
-              onClick={() => navigate('/run')}
-              className="border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-slate-100 font-semibold text-xl px-8 py-5 rounded-2xl transition-colors duration-150 tracking-tight"
-            >
-              Use as Guest
-            </button>
-          </>
-        )}
-      </div>
+      {/* ── Developer Banner ─────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-700 bg-slate-900 p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+        <div className="flex items-start gap-4">
+          <div className="shrink-0 p-3 bg-slate-800 rounded-xl border border-slate-600">
+            <Code2 size={22} className="text-amber-400" strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-lg font-semibold text-white mb-1.5">Source Code</p>
+            <p className="text-sm text-slate-300 max-w-lg leading-relaxed">
+              The entire codebase is open source on GitHub. Check out the repo for implementation details, or to contribute your own features and improvements.
+            </p>
+          </div>
+        </div>
 
+        <div className="flex items-center gap-3 shrink-0">
+          <a
+            href="https://github.com/nicholaslawrence-hub/compbio_agent_harness"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm px-6 py-3 rounded-xl transition-colors duration-150"
+          >
+            <Github size={15} strokeWidth={2} />
+            View Source
+          </a>
+          <a
+            href="https://www.linkedin.com/in/nicholas-lawrence-a16122296/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 border border-slate-500 hover:border-slate-300 text-slate-200 hover:text-white text-sm px-6 py-3 rounded-xl transition-colors duration-150"
+          >
+            <Linkedin size={14} strokeWidth={1.5} />
+            Nicholas Lawrence
+          </a>
+        </div>
+      </div>
     </div>
   )
 }

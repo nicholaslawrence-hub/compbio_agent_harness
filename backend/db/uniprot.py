@@ -4,6 +4,9 @@ from typing import Optional
 
 BASE = "https://rest.uniprot.org/uniprotkb"
 
+# Valid UniProt REST field names (function → cc_function, sequence → sequence)
+_FIELDS = "accession,id,gene_names,protein_name,cc_function,go,xref_pdb,sequence"
+
 
 def search_protein(gene_symbol: str, organism: str = "human") -> Optional[dict]:
     """Return the top UniProt entry for a gene symbol."""
@@ -11,10 +14,13 @@ def search_protein(gene_symbol: str, organism: str = "human") -> Optional[dict]:
         "query": f"gene:{gene_symbol} AND organism_name:{organism} AND reviewed:true",
         "format": "json",
         "size": 1,
-        "fields": "accession,id,gene_names,protein_name,function,go,xref_pdb,sequence",
+        "fields": _FIELDS,
     }
-    resp = httpx.get(f"{BASE}/search", params=params, timeout=30)
-    resp.raise_for_status()
+    try:
+        resp = httpx.get(f"{BASE}/search", params=params, timeout=30)
+        resp.raise_for_status()
+    except Exception:
+        return None
     data = resp.json()
     results = data.get("results", [])
     if not results:

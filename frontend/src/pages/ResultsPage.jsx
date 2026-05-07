@@ -10,6 +10,17 @@ import VolcanoPlot from '../components/VolcanoPlot.jsx'
 
 const TABS = ['Hypotheses', 'DGE Results', 'Report', 'Raw Data']
 
+const STEP_LABELS = {
+  queued:              { n: 0, text: 'Queued — waiting to start…' },
+  running:             { n: 1, text: 'Step 1 — Running PyDESeq2 differential expression…' },
+  dge_complete:        { n: 2, text: 'Step 2 — Calculating pathway enrichment (KEGG / GO / Reactome)…' },
+  pathway_complete:    { n: 3, text: 'Step 3 — Mapping protein interaction networks (STRING)…' },
+  ppi_complete:        { n: 4, text: 'Step 4 — Mining PubMed literature & Pinecone index…' },
+  rag_complete:        { n: 5, text: 'Step 5 — Annotating drugs and proteins (ChEMBL / UniProt)…' },
+  annotation_complete: { n: 6, text: 'Step 6 — Synthesizing hypotheses with GPT-4o…' },
+  synthesis_complete:  { n: 7, text: 'Step 7 — Generating research report…' },
+}
+
 export default function ResultsPage() {
   const { jobId } = useParams()
   const [job, setJob] = useState(null)
@@ -59,12 +70,30 @@ export default function ResultsPage() {
 
       {/* Progress */}
       {isRunning && (
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <RefreshCw size={15} className="text-indigo-400 animate-spin" />
-            <h2 className="text-sm font-semibold text-white">Analysis Running…</h2>
+        <div className="card space-y-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw size={15} className="text-amber-400 animate-spin" />
+            <h2 className="text-sm font-semibold text-slate-100">Analysis Running</h2>
+            <span className="text-xs text-slate-600 font-mono ml-auto">{job?.progress ?? 0}%</span>
           </div>
           <ProgressBar progress={job?.progress ?? 0} status={job?.status} />
+          <div className="space-y-1.5 pt-1">
+            {Object.entries(STEP_LABELS).map(([key, { n, text }]) => {
+              const currentN = STEP_LABELS[job?.status]?.n ?? 0
+              const done = n < currentN
+              const active = key === job?.status
+              return (
+                <div key={key} className={`flex items-center gap-2.5 text-xs transition-colors duration-300 ${
+                  active ? 'text-amber-400' : done ? 'text-slate-600' : 'text-slate-800'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    active ? 'bg-amber-400' : done ? 'bg-slate-700' : 'bg-slate-800'
+                  }`} />
+                  {text}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -136,7 +165,7 @@ export default function ResultsPage() {
             {tab === 'Report' && (
               <div className="card">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm font-semibold text-white">AI-Generated Research Report</h3>
+                  <h3 className="text-sm font-semibold text-white">Research Report</h3>
                   {report && (
                     <button onClick={downloadReport} className="btn-secondary flex items-center gap-1.5 text-xs">
                       <Download size={13} /> Download .md

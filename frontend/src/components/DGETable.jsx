@@ -1,5 +1,19 @@
 import { useState } from 'react'
-import { ArrowUpDown, ExternalLink } from 'lucide-react'
+import { ArrowUpDown, Download } from 'lucide-react'
+
+function exportCSV(rows) {
+  const header = 'gene,log2FoldChange,pvalue,padj'
+  const lines = rows.map(r =>
+    [r.gene, r.log2FoldChange, r.pvalue ?? '', r.padj].join(',')
+  )
+  const blob = new Blob([header + '\n' + lines.join('\n')], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'dge_results.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 export default function DGETable({ results = [] }) {
   const [sortField, setSortField] = useState('log2FoldChange')
@@ -31,6 +45,15 @@ export default function DGETable({ results = [] }) {
   if (!results.length) return <p className="text-sm text-slate-500 text-center py-8">No DGE results yet.</p>
 
   return (
+    <div>
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={() => exportCSV(sorted)}
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
+        >
+          <Download size={12} /> Export CSV
+        </button>
+      </div>
     <div className="overflow-x-auto rounded-lg border border-gray-800">
       <table className="w-full text-sm">
         <thead className="bg-gray-900/80">
@@ -75,6 +98,7 @@ export default function DGETable({ results = [] }) {
           })}
         </tbody>
       </table>
+    </div>
     </div>
   )
 }

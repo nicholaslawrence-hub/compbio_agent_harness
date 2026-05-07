@@ -1,4 +1,5 @@
 """Differential Gene Expression analysis using PyDESeq2 or fallback t-test."""
+import csv
 import io
 import numpy as np
 import pandas as pd
@@ -101,8 +102,62 @@ def top_upregulated(dge_results: pd.DataFrame, n: int = 20, padj_cutoff: float =
 
 
 def parse_count_matrix_from_upload(content: bytes, filename: str) -> pd.DataFrame:
-    """Parse uploaded TSV/CSV count matrix. First column = gene names."""
-    sep = "\t" if filename.endswith(".tsv") or filename.endswith(".txt") else ","
-    df = pd.read_csv(io.BytesIO(content), sep=sep, index_col=0)
+    """
+    Parse an uploaded count matrix robustly:
+    - Auto-detects TSV vs CSV by extension and by sniffing the first line
+    - Strips UTF-8 BOM if present
+    - Drops fully-blank rows and columns
+    - Strips whitespace from gene names and sample headers
+    - Deduplicates gene names (keeps row with highest total count)
+    - Drops non-numeric columns silently
+    """
+    # Strip BOM
+    if content.startswith(b"\xef\xbb\xbf"):
+        content = content[3:]
+
+    lower = filename.lower()
+    if lower.endswith(".tsv"):
+        sep = "\t"
+    elif lower.endswith(".csv"):
+        sep = ","
+    else:
+        # .txt or unknown extension: use csv.Sniffer on a multi-line sample
+        # so we're not fooled by a single header line with mixed punctuation
+        sample = content[:16384].decode("utf-8", errors="replace")
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters="\t,")
+            sep = dialect.delimiter
+        except csv.Error:
+            # last resort: whichever delimiter appears more often in the sample
+            sep = "\t" if sample.count("\t") > sample.count(",") else ","
+
+    df = pd.read_csv(
+        io.BytesIO(content),
+        sep=sep,
+        index_col=0,
+        comment="#",       # skip comment lines
+        skip_blank_lines=True,
+    )
+
+    # Normalise index (gene names)
+    df.index = df.index.astype(str).str.strip()
     df.index.name = "gene"
+
+    # Normalise column headers (sample names)
+    df.columns = df.columns.astype(str).str.strip()
+
+    # Drop fully-blank rows and columns
+    df = df.dropna(how="all").dropna(axis=1, how="all")
+
+    # Keep only numeric columns
+    df = df.select_dtypes(include="number")
+
+    # Deduplicate gene rows: keep the row with the highest total count
+    if df.index.duplicated().any():
+        df = df.assign(_total=df.sum(axis=1)).sort_values("_total", ascending=False)
+        df = df[~df.index.duplicated(keep="first")].drop(columns="_total")
+
+    if df.empty:
+        raise ValueError("Count matrix is empty after parsing — check file format.")
+
     return df

@@ -77,41 +77,58 @@ def _fetch_pubmed(gene_symbol: str, disease_context: str, max_results: int) -> l
 
 
 def _fetch_semantic_scholar(gene_symbol: str, disease_context: str, max_results: int) -> list[dict]:
+    """Fetch from Semantic Scholar with exponential backoff on 429."""
+    import time
+
     query = f"{gene_symbol} drug target"
     if disease_context:
         query += f" {disease_context}"
 
-    try:
-        resp = httpx.get(
-            f"{SEMANTIC_SCHOLAR_BASE}/paper/search",
-            params={
-                "query": query,
-                "limit": max_results,
-                "fields": "title,abstract,year,externalIds,url",
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        papers = resp.json().get("data", [])
+    params = {
+        "query": query,
+        "limit": max_results,
+        "fields": "title,abstract,year,externalIds,url",
+    }
 
-        results = []
-        for p in papers:
-            abstract = p.get("abstract") or ""
-            if not abstract:
+    for attempt in range(3):
+        try:
+            resp = httpx.get(
+                f"{SEMANTIC_SCHOLAR_BASE}/paper/search",
+                params=params,
+                timeout=20,
+            )
+            if resp.status_code == 429:
+                # Respect Retry-After if present, else exponential backoff
+                retry_after = int(resp.headers.get("Retry-After", 2 ** (attempt + 1)))
+                retry_after = min(retry_after, 30)   # cap at 30 s
+                time.sleep(retry_after)
                 continue
-            external_ids = p.get("externalIds") or {}
-            results.append({
-                "source": "Semantic Scholar",
-                "title": p.get("title", ""),
-                "abstract": abstract[:1500],
-                "year": str(p.get("year", "")),
-                "pmid": external_ids.get("PubMed", ""),
-                "doi": external_ids.get("DOI", ""),
-                "url": p.get("url", ""),
-            })
-        return results
-    except Exception:
-        return []
+            resp.raise_for_status()
+            papers = resp.json().get("data", [])
+
+            results = []
+            for p in papers:
+                abstract = p.get("abstract") or ""
+                if not abstract:
+                    continue
+                external_ids = p.get("externalIds") or {}
+                results.append({
+                    "source": "Semantic Scholar",
+                    "title": p.get("title", ""),
+                    "abstract": abstract[:1500],
+                    "year": str(p.get("year", "")),
+                    "pmid": external_ids.get("PubMed", ""),
+                    "doi": external_ids.get("DOI", ""),
+                    "url": p.get("url", ""),
+                })
+            return results
+        except Exception:
+            break   # non-429 error — give up immediately
+
+    return []
+
+
+_ABSTRACT_PROMPT_CHARS = 300   # cap per abstract in LLM prompts — main token cost lever
 
 
 def format_for_prompt(papers: list[dict]) -> str:
@@ -122,10 +139,11 @@ def format_for_prompt(papers: list[dict]) -> str:
     lines = []
     for i, p in enumerate(papers, 1):
         pmid_str = f" [PMID: {p['pmid']}]" if p.get("pmid") else ""
-        doi_str = f" [DOI: {p['doi']}]" if p.get("doi") else ""
+        abstract  = p.get("abstract", "")
+        truncated = abstract[:_ABSTRACT_PROMPT_CHARS] + ("…" if len(abstract) > _ABSTRACT_PROMPT_CHARS else "")
         lines.append(
-            f"[{i}] ({p['source']}, {p.get('year', 'n.d.')}){pmid_str}{doi_str}\n"
-            f"Title: {p['title']}\n"
-            f"Abstract: {p['abstract']}\n"
+            f"[{i}] {p['source']} {p.get('year', '')}{pmid_str}\n"
+            f"{p['title']}\n"
+            f"{truncated}"
         )
     return "\n---\n".join(lines)

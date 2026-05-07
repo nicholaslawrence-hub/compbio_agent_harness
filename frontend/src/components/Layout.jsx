@@ -1,5 +1,5 @@
 import { Outlet, NavLink, Link } from 'react-router-dom'
-import { Search, Dna, Github, UserCircle2 } from 'lucide-react'
+import { Dna, Github, Linkedin, Search, UserCircle2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function Layout() {
@@ -80,16 +80,37 @@ export default function Layout() {
       </main>
 
       <footer className="max-w-7xl mx-auto w-full px-10 py-6 flex items-center justify-between border-t border-slate-800/60">
-        <span className="text-xs text-slate-700">PharmaGPT /agent</span>
-        <a
-          href="https://github.com/nicholaslawrence-hub/compbio_agent_harness"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-300 transition-colors duration-150"
-        >
-          <Github size={13} strokeWidth={1.5} />
-          nicholaslawrence-hub
-        </a>
+        <span className="text-xs text-slate-600">
+          Built by{' '}
+          <a
+            href="https://www.linkedin.com/in/nicholaslawrence"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-slate-400 hover:text-slate-200 transition-colors duration-150"
+          >
+            Nicholas Lawrence
+          </a>
+        </span>
+        <div className="flex items-center gap-4">
+          <a
+            href="https://www.linkedin.com/in/nicholaslawrence"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-300 transition-colors duration-150"
+          >
+            <Linkedin size={12} strokeWidth={1.5} />
+            LinkedIn
+          </a>
+          <a
+            href="https://github.com/nicholaslawrence-hub/compbio_agent_harness"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-300 transition-colors duration-150"
+          >
+            <Github size={12} strokeWidth={1.5} />
+            nicholaslawrence-hub
+          </a>
+        </div>
       </footer>
     </div>
   )

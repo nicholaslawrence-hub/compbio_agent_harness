@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     max_genes_for_rag: int = 20
     pubmed_max_results: int = 5
-    llm_model: str = "gpt-4o"
+    llm_model: str = "gpt-5.4-mini"
     llm_temperature: float = 0.2
 
     class Config:
