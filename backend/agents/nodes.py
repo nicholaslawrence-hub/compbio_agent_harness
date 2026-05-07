@@ -717,10 +717,12 @@ when you have substantive findings for all top genes."""
         next_step = "finalize"
 
     # Apply pruning: remove dead-end genes from active investigation list
+    # Never prune below 2 genes so the pipeline always has candidates to work with
     current_genes = state.get("top_genes", [])
-    if prune_genes:
-        pruned_set   = set(prune_genes)
-        current_genes = [g for g in current_genes if g not in pruned_set]
+    if prune_genes and len(current_genes) > 2:
+        pruned_set = set(prune_genes)
+        filtered   = [g for g in current_genes if g not in pruned_set]
+        current_genes = filtered if len(filtered) >= 2 else current_genes[:2]
 
     prune_note = f" Pruned: {prune_genes}." if prune_genes else ""
     ctx_entry = {
