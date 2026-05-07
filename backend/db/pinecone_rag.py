@@ -19,7 +19,7 @@ import hashlib
 import time
 from pinecone import Pinecone
 from config import settings
-from db.literature_fetch import fetch_gene_literature, format_for_prompt
+from db.literature_fetch import fetch_gene_literature, fetch_gene_literature_with_interactor, format_for_prompt
 
 # Simple in-memory cache: {gene_symbol: unix_timestamp_of_last_upsert}
 _upsert_cache: dict[str, float] = {}
@@ -31,17 +31,22 @@ def _index():
     return pc.Index(settings.pinecone_index_name)
 
 
-def query_literature(gene_symbol: str, context: str = "") -> dict:
+def query_literature(
+    gene_symbol: str,
+    context: str = "",
+    ppi_partners: list[str] | None = None,
+) -> dict:
     """
     Main entry point for the literature RAG node.
 
     1. Fetches fresh abstracts from PubMed + Semantic Scholar.
     2. Upserts them into the Pinecone dense index (Pinecone embeds automatically).
     3. Queries the index for the most relevant results.
-    4. Returns structured result including dark-gene classification.
+    4. If <3 hits, retries with '{gene} AND {top_interactor}' fallback (Tool B).
+    5. Returns structured result including dark-gene classification.
     """
     if not settings.pinecone_api_key:
-        return _fallback_pubmed(gene_symbol)
+        return _fallback_pubmed(gene_symbol, ppi_partners=ppi_partners)
 
     try:
         disease = context.split(".")[0].replace("Disease: ", "") if context else ""
@@ -62,8 +67,25 @@ def query_literature(gene_symbol: str, context: str = "") -> dict:
         query_text = f"{gene_symbol} drug target therapeutic {disease}".strip()
         hits = _search(query_text, gene_symbol, top_k=4)
 
-        # Step 4 — classify and return
-        pubmed_hits = sum(1 for p in hits if p.get("source") == "PubMed")
+        # Step 4 — interactor fallback: if still sparse, retry with top PPI partners
+        if len(hits) < 3 and ppi_partners:
+            for partner in ppi_partners[:2]:
+                fallback_papers = fetch_gene_literature_with_interactor(
+                    gene_symbol, partner, max_papers=4
+                )
+                if fallback_papers:
+                    _upsert_papers(fallback_papers, gene_symbol)
+                    fallback_query = f"{gene_symbol} {partner} interaction mechanism"
+                    extra_hits = _search(fallback_query, gene_symbol, top_k=3)
+                    seen_titles = {h.get("title", "") for h in hits}
+                    for h in extra_hits:
+                        if h.get("title", "") not in seen_titles:
+                            hits.append(h)
+                            seen_titles.add(h.get("title", ""))
+                if len(hits) >= 3:
+                    break
+
+        # Step 5 — classify and return
         total_hits = len(hits)
         is_dark = total_hits < 3
 
@@ -164,9 +186,22 @@ def _extract_drugs_from_hits(hits: list[dict]) -> list[str]:
     return list(candidates)[:10]
 
 
-def _fallback_pubmed(gene_symbol: str) -> dict:
-    """Used when PINECONE_API_KEY is not set — still auto-fetches literature."""
+def _fallback_pubmed(gene_symbol: str, ppi_partners: list[str] | None = None) -> dict:
+    """Used when PINECONE_API_KEY is not set — still auto-fetches literature with interactor fallback."""
     papers = fetch_gene_literature(gene_symbol, max_papers=8)
+
+    if len(papers) < 3 and ppi_partners:
+        seen = {p.get("title", "")[:60].lower() for p in papers}
+        for partner in ppi_partners[:2]:
+            extras = fetch_gene_literature_with_interactor(gene_symbol, partner, max_papers=4)
+            for p in extras:
+                key = p.get("title", "")[:60].lower()
+                if key not in seen:
+                    papers.append(p)
+                    seen.add(key)
+            if len(papers) >= 3:
+                break
+
     return {
         "gene": gene_symbol,
         "pubmed_hits": len(papers),

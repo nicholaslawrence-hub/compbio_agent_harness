@@ -128,6 +128,66 @@ def _fetch_semantic_scholar(gene_symbol: str, disease_context: str, max_results:
     return []
 
 
+def fetch_gene_literature_with_interactor(
+    gene_symbol: str,
+    interactor: str,
+    max_papers: int = 4,
+) -> list[dict]:
+    """
+    Fallback search: '{gene} AND {interactor}' via PubMed.
+
+    Called when the primary '{gene} AND {disease}' search returns fewer than 3
+    results.  Allows the agent to surface papers like "No direct link to cancer
+    found, but paper X shows it regulates KRAS, a known cancer driver."
+    Results are tagged with the interactor that triggered the fallback so the
+    LLM can frame the indirect evidence correctly.
+    """
+    query = f"{gene_symbol}[Title/Abstract] AND {interactor}[Title/Abstract]"
+    try:
+        with Entrez.esearch(db="pubmed", term=query, retmax=max_papers, sort="relevance") as h:
+            record = Entrez.read(h)
+        ids = record.get("IdList", [])
+        if not ids:
+            return []
+
+        with Entrez.efetch(db="pubmed", id=",".join(ids), rettype="xml", retmode="xml") as h:
+            articles = Entrez.read(h)
+
+        results = []
+        for article in articles.get("PubmedArticle", []):
+            try:
+                med = article["MedlineCitation"]
+                art = med["Article"]
+                title = str(art.get("ArticleTitle", ""))
+                abstract_texts = art.get("Abstract", {}).get("AbstractText", [])
+                abstract = (
+                    " ".join(str(t) for t in abstract_texts)
+                    if isinstance(abstract_texts, list)
+                    else str(abstract_texts)
+                )
+                pmid = str(med["PMID"])
+                year = str(
+                    art.get("Journal", {})
+                    .get("JournalIssue", {})
+                    .get("PubDate", {})
+                    .get("Year", "")
+                )
+                results.append({
+                    "source": "PubMed",
+                    "title": title,
+                    "abstract": abstract[:1500],
+                    "year": year,
+                    "pmid": pmid,
+                    "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+                    "fallback_interactor": interactor,
+                })
+            except (KeyError, TypeError):
+                continue
+        return results
+    except Exception:
+        return []
+
+
 _ABSTRACT_PROMPT_CHARS = 300   # cap per abstract in LLM prompts — main token cost lever
 
 

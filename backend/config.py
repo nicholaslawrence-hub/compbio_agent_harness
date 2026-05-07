@@ -18,10 +18,10 @@ class Settings(BaseSettings):
     processed_dir: Path = Path("/tmp/pharmagt/processed")
     results_dir: Path = Path("/tmp/pharmagt/results")
 
-    max_genes_for_rag: int = 20
+    max_genes_for_rag: int = 10
     pubmed_max_results: int = 5
     llm_model: str = "gpt-5.4-mini"
-    llm_temperature: float = 0.2
+    llm_temperature: float = 0.5
 
     class Config:
         env_file = ".env"

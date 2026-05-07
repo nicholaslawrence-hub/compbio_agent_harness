@@ -23,7 +23,7 @@ def get_ppi_network(gene_symbol: str, limit: int = 20, score_threshold: int = 70
             "limit": limit,
             "required_score": score_threshold,
         },
-        timeout=30,
+        timeout=12,
     )
     if resp.status_code != 200:
         return {"gene": gene_symbol, "partners": [], "error": resp.text[:200]}
@@ -44,7 +44,7 @@ def _resolve_identifier(gene_symbol: str) -> Optional[str]:
     resp = httpx.get(
         f"{STRING_BASE}/json/get_string_ids",
         params={"identifier": gene_symbol, "species": SPECIES_HUMAN, "limit": 1},
-        timeout=30,
+        timeout=12,
     )
     if resp.status_code != 200:
         return None
