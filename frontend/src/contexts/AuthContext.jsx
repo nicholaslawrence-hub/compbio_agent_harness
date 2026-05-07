@@ -64,13 +64,21 @@ export function AuthProvider({ children }) {
     return data.user
   }
 
+  const loginWithToken = async (token) => {
+    setToken(token)
+    const res = await fetch(`${BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.ok) setUser(await res.json())
+  }
+
   const logout = () => {
     setToken(null)
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, getToken }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, getToken, loginWithToken }}>
       {children}
     </AuthContext.Provider>
   )

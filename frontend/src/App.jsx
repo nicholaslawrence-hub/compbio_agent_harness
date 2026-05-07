@@ -7,6 +7,7 @@ import ResultsPage from './pages/ResultsPage.jsx'
 import GeneLookupPage from './pages/GeneLookupPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import AccountPage from './pages/AccountPage.jsx'
+import OAuthCallbackPage from './pages/OAuthCallbackPage.jsx'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="gene/:symbol" element={<GeneLookupPage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="account" element={<AccountPage />} />
+          <Route path="oauth/callback" element={<OAuthCallbackPage />} />
         </Route>
       </Routes>
     </AuthProvider>
