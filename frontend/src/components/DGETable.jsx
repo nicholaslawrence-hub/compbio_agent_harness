@@ -33,7 +33,7 @@ export default function DGETable({ results = [] }) {
   const Th = ({ field, children }) => (
     <th
       onClick={() => handleSort(field)}
-      className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 whitespace-nowrap"
+      className="px-4 py-2 text-left text-sm font-semibold text-white/70 uppercase tracking-wide cursor-pointer hover:text-white whitespace-nowrap"
     >
       <span className="flex items-center gap-1">
         {children}
@@ -58,7 +58,7 @@ export default function DGETable({ results = [] }) {
       <table className="w-full text-sm">
         <thead className="bg-gray-900/80">
           <tr>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Gene</th>
+            <th className="px-4 py-2 text-left text-sm font-semibold text-white/70 uppercase tracking-wide">Gene</th>
             <Th field="log2FoldChange">log2FC</Th>
             <Th field="pvalue">p-value</Th>
             <Th field="padj">adj. p-value</Th>
@@ -71,7 +71,7 @@ export default function DGETable({ results = [] }) {
             const isSignificant = padj < 0.05 && Math.abs(lfc) > 1
             return (
               <tr key={i} className="hover:bg-gray-800/40 transition-colors">
-                <td className="px-4 py-2.5 font-mono font-semibold">
+                <td className="px-4 py-2.5 font-semibold">
                   <a
                     href={`/gene/${row.gene}`}
                     className="text-indigo-400 hover:text-indigo-300"
@@ -84,11 +84,11 @@ export default function DGETable({ results = [] }) {
                     {lfc > 0 ? '+' : ''}{lfc.toFixed(3)}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-gray-400 font-mono text-xs">
+                <td className="px-4 py-2.5 text-white/50 text-xs">
                   {Number(row.pvalue ?? 1).toExponential(2)}
                 </td>
                 <td className="px-4 py-2.5">
-                  <span className={`font-mono text-xs ${isSignificant ? 'text-indigo-400' : 'text-white/40'}`}>
+                  <span className={`text-xs ${isSignificant ? 'text-indigo-400' : 'text-white/40'}`}>
                     {padj.toExponential(2)}
                   </span>
                   {isSignificant && <span className="ml-2 text-xs text-indigo-600">*</span>}

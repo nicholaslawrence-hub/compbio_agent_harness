@@ -1,4 +1,4 @@
-import { CheckCircle } from 'lucide-react'
+﻿import { CheckCircle } from 'lucide-react'
 
 const STAGES = [
   { at: 0,   label: 'Queued',                  sub: 'waiting for worker' },
@@ -95,7 +95,7 @@ export default function ProgressBar({ progress = 0 }) {
                 </span>
                 {stage.sub && (active || done) && (
                   <span
-                    className="font-mono text-[10px] tracking-wide mt-0.5 block"
+                    className="text-xs tracking-wide mt-0.5 block"
                     style={{ color: done ? 'rgba(255,255,255,0.15)' : 'rgba(100,116,139,0.7)' }}
                   >
                     {stage.sub}

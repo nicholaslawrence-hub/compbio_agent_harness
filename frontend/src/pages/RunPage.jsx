@@ -34,7 +34,7 @@ export default function RunPage() {
   return (
     <div className="py-10 sm:py-16">
       <div className="mb-10">
-        <p className="text-xs font-mono uppercase tracking-[0.2em] text-amber-400/60 mb-2">New Analysis</p>
+        <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-2">New Analysis</p>
         <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 tracking-tight">Launch the agent network</h1>
         <p className="text-base text-white/80 max-w-lg">
           Upload a count matrix and configure your experiment. Results are ready in minutes.
@@ -53,12 +53,12 @@ export default function RunPage() {
 
           {/* Input reference */}
           <div className="glass-panel rounded-2xl p-6">
-            <p className="text-xs font-mono uppercase tracking-widest text-amber-400/60 mb-5">Input reference</p>
+            <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-5">Input reference</p>
             <div className="space-y-5">
               {FIELD_DOCS.map(({ field, doc }) => (
                 <div key={field} className="border-b border-slate-800/60 pb-4 last:border-0 last:pb-0">
                   <p className="text-sm font-semibold text-white mb-1">{field}</p>
-                  <p className="text-sm text-white/50 leading-relaxed">{doc}</p>
+                  <p className="text-sm text-white/70 leading-relaxed">{doc}</p>
                 </div>
               ))}
             </div>
@@ -66,12 +66,12 @@ export default function RunPage() {
 
           {/* Tips */}
           <div className="glass-panel rounded-2xl p-6">
-            <p className="text-xs font-mono uppercase tracking-widest text-amber-400/60 mb-4">Tips</p>
+            <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-4">Tips</p>
             <ul className="space-y-3">
               {TIPS.map((tip, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="font-mono text-xs text-amber-400/40 pt-0.5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="text-sm text-white/50 leading-relaxed">{tip}</span>
+                  <span className="text-xs text-amber-400/40 pt-0.5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="text-sm text-white/70 leading-relaxed">{tip}</span>
                 </li>
               ))}
             </ul>

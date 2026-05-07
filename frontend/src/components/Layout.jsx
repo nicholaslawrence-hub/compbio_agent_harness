@@ -175,7 +175,7 @@ export default function Layout() {
 
             {/* Tool */}
             <div>
-              <p className="text-xs font-mono uppercase tracking-widest text-white/50 mb-5">Tool</p>
+              <p className="text-sm uppercase tracking-wide text-white/60 mb-5">Tool</p>
               <ul className="space-y-3.5">
                 <li><Link to="/"          className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Home</Link></li>
                 <li><Link to="/run"       className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Run Analysis</Link></li>
@@ -185,7 +185,7 @@ export default function Layout() {
 
             {/* Account */}
             <div>
-              <p className="text-xs font-mono uppercase tracking-widest text-white/50 mb-5">Account</p>
+              <p className="text-sm uppercase tracking-wide text-white/60 mb-5">Account</p>
               <ul className="space-y-3.5">
                 <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Log in</Link></li>
                 <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sign up</Link></li>
@@ -195,7 +195,7 @@ export default function Layout() {
 
             {/* Project */}
             <div>
-              <p className="text-xs font-mono uppercase tracking-widest text-white/50 mb-5">Project</p>
+              <p className="text-sm uppercase tracking-wide text-white/60 mb-5">Project</p>
               <ul className="space-y-3.5">
                 <li>
                   <a href="https://github.com/nicholaslawrence-hub/compbio_agent_harness" target="_blank" rel="noopener noreferrer"
@@ -215,14 +215,14 @@ export default function Layout() {
 
           {/* Bottom bar */}
           <div className="pt-7 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-sm text-white/50">
+            <p className="text-sm text-white/70">
               Built by{' '}
               <a href="https://www.linkedin.com/in/nicholas-lawrence-a16122296/" target="_blank" rel="noopener noreferrer"
                 className="text-white font-medium hover:text-amber-400 transition-colors duration-150">
                 Nicholas Lawrence
               </a>
             </p>
-            <p className="text-sm text-white/50 font-mono">RNAgent</p>
+            <p className="text-sm text-white/70">RNAgent</p>
           </div>
 
         </div>

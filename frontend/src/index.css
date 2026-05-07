@@ -7,7 +7,7 @@
     @apply bg-slate-950 text-white antialiased;
     font-family: 'DM Sans', sans-serif;
   }
-  code, pre, .font-mono {
+  code, pre {
     font-family: 'DM Mono', monospace;
   }
 }
@@ -23,7 +23,7 @@
     @apply bg-slate-800 hover:bg-slate-700 text-white/80 font-medium px-4 py-2 rounded-md transition-colors text-sm;
   }
   .label {
-    @apply block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wide;
+    @apply block text-sm font-medium text-white/70 mb-1.5 uppercase tracking-wide;
   }
   .input {
     @apply w-full bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500;
@@ -89,7 +89,7 @@
   border-color: rgba(251,191,36,0.5);
   box-shadow: 0 0 0 2px rgba(251,191,36,0.08);
 }
-.glass-input::placeholder { color: rgba(148,163,184,0.5); }
+.glass-input::placeholder { color: rgba(255,255,255,0.3); }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -98,9 +98,9 @@
 .prose-dark h1, .prose-dark h2, .prose-dark h3 { @apply text-white font-semibold mt-6 mb-2; }
 .prose-dark h1 { @apply text-xl; }
 .prose-dark h2 { @apply text-lg border-b border-slate-800 pb-1.5; }
-.prose-dark h3 { @apply text-base text-white/70; }
-.prose-dark p { @apply text-white/60 mb-3 leading-relaxed text-sm; }
-.prose-dark ul { @apply list-disc list-inside text-white/60 mb-3 space-y-1; }
+.prose-dark h3 { @apply text-base text-white/80; }
+.prose-dark p { @apply text-white/75 mb-3 leading-relaxed text-sm; }
+.prose-dark ul { @apply list-disc list-inside text-white/75 mb-3 space-y-1; }
 .prose-dark li { @apply text-sm; }
 .prose-dark strong { @apply text-white font-semibold; }
 .prose-dark code { @apply bg-slate-800 text-indigo-300 px-1.5 py-0.5 rounded text-xs; }

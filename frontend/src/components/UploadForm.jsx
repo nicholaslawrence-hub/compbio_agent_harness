@@ -22,7 +22,7 @@ function parsePastedConditions(text) {
 }
 
 const LABEL = ({ children }) => (
-  <p className="text-xs font-mono uppercase tracking-widest text-white/50 mb-2">{children}</p>
+  <p className="text-sm uppercase tracking-wide text-white/60 mb-2">{children}</p>
 )
 
 export default function UploadForm() {
@@ -113,7 +113,7 @@ export default function UploadForm() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white leading-tight">{file.name}</p>
-                  <p className="text-xs text-white/40 font-mono">{(file.size / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs text-white/40">{(file.size / 1024).toFixed(1)} KB</p>
                 </div>
               </div>
               <button
@@ -133,7 +133,7 @@ export default function UploadForm() {
                 <p className="text-sm font-medium text-white">
                   {isDragActive ? 'Drop to upload' : 'Drop your file here or click to browse'}
                 </p>
-                <p className="text-xs text-white/40 font-mono mt-0.5">.tsv · .csv · .txt — rows = genes, cols = samples</p>
+                <p className="text-xs text-white/40 mt-0.5">.tsv · .csv · .txt — rows = genes, cols = samples</p>
               </div>
             </div>
           )}
@@ -159,7 +159,7 @@ export default function UploadForm() {
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 pointer-events-none" />
             <input
-              className="glass-input w-full rounded-xl pl-7 pr-3 py-3 text-sm font-mono"
+              className="glass-input w-full rounded-xl pl-7 pr-3 py-3 text-sm"
               value={conditionA}
               onChange={e => { setConditionA(e.target.value); setSamples(s => s.map(r => r.condition === conditionA ? { ...r, condition: e.target.value } : r)) }}
               placeholder="case"
@@ -171,7 +171,7 @@ export default function UploadForm() {
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 pointer-events-none" />
             <input
-              className="glass-input w-full rounded-xl pl-7 pr-3 py-3 text-sm font-mono"
+              className="glass-input w-full rounded-xl pl-7 pr-3 py-3 text-sm"
               value={conditionB}
               onChange={e => setConditionB(e.target.value)}
               placeholder="control"
@@ -188,13 +188,13 @@ export default function UploadForm() {
             <button
               type="button"
               onClick={() => { setPasteMode(!pasteMode); setPasteError('') }}
-              className="text-xs text-white/50 hover:text-white transition-colors font-mono"
+              className="text-xs text-white/50 hover:text-white transition-colors"
             >
               {pasteMode ? '← manual' : 'paste from sheet'}
             </button>
             {!pasteMode && (
               <button type="button" onClick={addSample}
-                className="flex items-center gap-1 text-xs text-amber-400/70 hover:text-amber-400 transition-colors font-mono">
+                className="flex items-center gap-1 text-xs text-amber-400/70 hover:text-amber-400 transition-colors">
                 <Plus size={11} /> add row
               </button>
             )}
@@ -204,14 +204,14 @@ export default function UploadForm() {
         {pasteMode ? (
           <div className="space-y-2">
             <textarea
-              className="glass-input w-full rounded-xl px-4 py-3 text-xs font-mono h-32 resize-none"
+              className="glass-input w-full rounded-xl px-4 py-3 text-xs h-32 resize-none"
               placeholder={"GBM_01\tdisease\nGBM_02\tdisease\nNRM_01\tcontrol\nNRM_02\tcontrol"}
               value={pasteText}
               onChange={e => setPasteText(e.target.value)}
             />
-            {pasteError && <p className="text-xs text-red-400 font-mono">{pasteError}</p>}
+            {pasteError && <p className="text-xs text-red-400">{pasteError}</p>}
             <button type="button" onClick={applyPaste}
-              className="text-xs font-mono text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-400/10 transition-colors">
+              className="text-xs text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-400/10 transition-colors">
               Apply
             </button>
           </div>
@@ -223,14 +223,14 @@ export default function UploadForm() {
                 <span className={`shrink-0 w-2 h-2 rounded-full transition-colors ${dotColor(s.condition)}`} />
 
                 <input
-                  className="glass-input flex-1 rounded-lg px-3 py-2 text-sm font-mono"
+                  className="glass-input flex-1 rounded-lg px-3 py-2 text-sm"
                   placeholder={`sample_${i + 1}`}
                   value={s.name}
                   onChange={e => updateSample(i, 'name', e.target.value)}
                 />
 
                 <select
-                  className={`glass-input rounded-lg px-2 py-2 text-xs font-mono border ${chipColor(s.condition)}`}
+                  className={`glass-input rounded-lg px-2 py-2 text-xs border ${chipColor(s.condition)}`}
                   style={{ background: 'transparent', minWidth: '90px' }}
                   value={s.condition}
                   onChange={e => updateSample(i, 'condition', e.target.value)}
@@ -249,11 +249,11 @@ export default function UploadForm() {
             ))}
           </div>
         )}
-        <p className="text-xs text-white/30 font-mono mt-2">Names must match column headers exactly.</p>
+        <p className="text-xs text-white/30 mt-2">Names must match column headers exactly.</p>
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 text-sm text-red-400 font-mono">
+        <div className="flex items-start gap-2 text-sm text-red-400">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           {error}
         </div>

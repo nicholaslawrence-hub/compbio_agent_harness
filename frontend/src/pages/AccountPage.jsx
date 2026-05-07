@@ -12,7 +12,7 @@ function StatusBadge({ status }) {
     queued:   'text-white/50 bg-slate-800/40 border-slate-700/50',
   }
   return (
-    <span className={`inline-block text-[10px] font-mono uppercase tracking-wide border rounded px-2 py-0.5 ${colours[status] ?? colours.queued}`}>
+    <span className={`inline-block text-xs font-medium uppercase tracking-wide border rounded px-2 py-0.5 ${colours[status] ?? colours.queued}`}>
       {status}
     </span>
   )
@@ -50,7 +50,7 @@ export default function AccountPage() {
 
       {/* Profile */}
       <div>
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Account</p>
+        <p className="text-sm uppercase tracking-wide text-white/60 mb-2">Account</p>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white">{user.name}</h1>
@@ -85,7 +85,7 @@ export default function AccountPage() {
 
       {/* Analysis history */}
       <div>
-        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30 mb-6">Analysis history</p>
+        <p className="text-sm uppercase tracking-wide text-white/60 mb-6">Analysis history</p>
 
         {historyLoading ? (
           <p className="text-sm text-white/30">Loading…</p>
@@ -102,7 +102,7 @@ export default function AccountPage() {
               <div key={job.job_id} className="py-4 flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-white truncate">{job.disease_term}</p>
-                  <p className="text-[11px] font-mono text-white/30 mt-0.5">
+                  <p className="text-xs text-white/60 mt-0.5">
                     {job.created_at ? new Date(job.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                   </p>
                 </div>

@@ -71,7 +71,7 @@ function AnimatedBar({ score, visible }) {
           }}
         />
       </div>
-      <span className="font-mono text-xs text-white/40 w-8 text-right">{score.toFixed(2)}</span>
+      <span className="text-sm text-white/70 w-10 text-right tabular-nums">{score.toFixed(2)}</span>
     </div>
   )
 }
@@ -224,7 +224,7 @@ export default function AnalyzePage() {
                       }`}>
                         {g.symbol}
                       </span>
-                      <div className="flex flex-wrap font-mono tabular-nums text-sm sm:text-base text-white gap-x-3">
+                      <div className="flex flex-wrap tabular-nums text-sm sm:text-base text-white gap-x-3">
                         <span>log₂FC {g.lfc}</span>
                         <span>padj {g.padj}</span>
                       </div>
@@ -256,7 +256,7 @@ export default function AnalyzePage() {
             ) : (
               <>
                 <p className="text-2xl font-bold text-white mb-1">{selectedGene}</p>
-                <p className="text-sm text-white/60 mb-5 font-mono">Generated hypothesis</p>
+                <p className="text-sm text-white/60 mb-5">Generated hypothesis</p>
 
                 <div className="flex-1 overflow-y-auto pr-1" style={{ maxHeight: '220px' }}>
                   <p key={selectedGene} className="text-lg text-white leading-relaxed animate-fade-in">
@@ -265,8 +265,8 @@ export default function AnalyzePage() {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between">
-                  <span className="text-base font-semibold text-white font-mono">Novelty score</span>
-                  <span className="font-mono text-2xl font-bold text-amber-400">
+                  <span className="text-base font-semibold text-white">Novelty score</span>
+                  <span className="text-2xl font-bold text-amber-400">
                     {EXAMPLE_GENES.find(g => g.symbol === selectedGene)?.novelty.toFixed(2)}
                   </span>
                 </div>

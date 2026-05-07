@@ -55,7 +55,7 @@ export default function GeneLookupPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white mb-1">Gene Lookup</h1>
-        <p className="text-sm text-gray-400">Explore PPI networks, drug interactions, and literature for any gene.</p>
+        <p className="text-sm text-white/70">Explore PPI networks, drug interactions, and literature for any gene.</p>
       </div>
 
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -84,19 +84,19 @@ export default function GeneLookupPage() {
                   <a
                     href={`https://www.uniprot.org/uniprotkb/${data.uniprot.accession}`}
                     target="_blank" rel="noopener noreferrer"
-                    className="text-indigo-400 hover:underline font-mono flex items-center gap-1"
+                    className="text-indigo-400 hover:underline flex items-center gap-1"
                   >
                     {data.uniprot.accession} <ExternalLink size={11} />
                   </a>
                 </div>
                 <div>
                   <span className="text-white/40">Protein</span>
-                  <p className="text-gray-200 text-xs mt-1">{data.uniprot.protein_name}</p>
+                  <p className="text-white text-xs mt-1">{data.uniprot.protein_name}</p>
                 </div>
                 {data.uniprot.function && (
                   <div>
                     <span className="text-white/40">Function</span>
-                    <p className="text-gray-300 text-xs mt-1 leading-relaxed line-clamp-4">{data.uniprot.function}</p>
+                    <p className="text-white/80 text-xs mt-1 leading-relaxed line-clamp-4">{data.uniprot.function}</p>
                   </div>
                 )}
                 {data.uniprot.pdb_ids?.length > 0 && (
@@ -170,11 +170,11 @@ export default function GeneLookupPage() {
                     <a
                       href={`https://pubmed.ncbi.nlm.nih.gov/${a.pmid}/`}
                       target="_blank" rel="noopener noreferrer"
-                      className="text-indigo-400 hover:underline font-mono"
+                      className="text-indigo-400 hover:underline"
                     >
                       PMID: {a.pmid}
                     </a>
-                    <p className="text-gray-400 mt-0.5 line-clamp-3">{a.abstract}</p>
+                    <p className="text-white/50 mt-0.5 line-clamp-3">{a.abstract}</p>
                   </div>
                 ))}
               </div>

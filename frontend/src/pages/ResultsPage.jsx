@@ -196,10 +196,10 @@ export default function ResultsPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors">
+        <Link to="/" className="flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors">
           <ChevronLeft size={16} /> New Analysis
         </Link>
-        <span className="text-xs text-gray-600 font-mono">Job: {jobId.slice(0, 8)}…</span>
+        <span className="text-xs text-white/30">Job: {jobId.slice(0, 8)}…</span>
       </div>
 
       {/* Progress card */}
@@ -218,11 +218,11 @@ export default function ResultsPage() {
           <div className="flex items-center gap-3">
             <RefreshCw size={18} className="text-indigo-400 animate-spin shrink-0" />
             <h2 className="text-lg font-bold text-white tracking-tight">Analysis Running</h2>
-            <span className="text-base text-indigo-300/80 font-mono font-semibold ml-1">
+            <span className="text-base text-indigo-300/80 font-semibold ml-1">
               {job?.progress ?? 0}%
             </span>
             {elapsed > 0 && (
-              <span className="text-xs text-white/30 font-mono ml-auto">
+              <span className="text-xs text-white/30 ml-auto">
                 {formatElapsed(elapsed)} elapsed
               </span>
             )}
@@ -258,9 +258,9 @@ export default function ResultsPage() {
           {supervisorLog.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-white/40">Agent Reasoning</span>
+                <span className="text-xs font-bold tracking-widest uppercase text-white/40">Agent Reasoning</span>
                 <div className="flex-1 h-px bg-slate-800" />
-                <span className="text-[10px] text-white/30 tabular-nums">{supervisorLog.length} step{supervisorLog.length !== 1 ? 's' : ''}</span>
+                <span className="text-xs text-white/30 tabular-nums">{supervisorLog.length} step{supervisorLog.length !== 1 ? 's' : ''}</span>
               </div>
               <div
                 ref={agentLogRef}
@@ -278,11 +278,11 @@ export default function ResultsPage() {
                     >
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot} ${isNewest ? 'animate-pulse' : ''}`} />
-                        <span className={`font-semibold text-[10px] uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
+                        <span className={`font-semibold text-xs uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
                         {entry.subquery && entry.subquery !== 'all top genes' && (
-                          <span className="text-white/40 text-[10px] font-mono truncate max-w-[140px]">→ {entry.subquery}</span>
+                          <span className="text-white/40 text-xs truncate max-w-[140px]">→ {entry.subquery}</span>
                         )}
-                        <span className="ml-auto text-slate-700 text-[10px] tabular-nums">#{i + 1}</span>
+                        <span className="ml-auto text-slate-700 text-xs tabular-nums">#{i + 1}</span>
                       </div>
                       <p className={`leading-relaxed pl-3.5 ${isNewest ? 'text-white/80' : 'text-white/40'}`}>
                         {entry.summary}
@@ -316,7 +316,7 @@ export default function ResultsPage() {
                 key={t}
                 onClick={() => setTab(t)}
                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-800' : 'text-white/40 hover:text-gray-300'
+                  tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-800' : 'text-white/40 hover:text-white/80'
                 }`}
               >
                 {t}
@@ -332,7 +332,7 @@ export default function ResultsPage() {
           <div>
             {tab === 'Hypotheses' && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-white/70">
                   Ranked by novelty score. Higher = fewer PubMed hits, lower OpenTargets evidence, no ChEMBL drugs. Computed as 1 - log10(pub_count) / 4.
                 </p>
                 {hypotheses.length === 0
@@ -381,7 +381,7 @@ export default function ResultsPage() {
             {tab === 'Raw Data' && (
               <div className="card">
                 <h3 className="text-sm font-semibold text-white mb-4">Raw Agent Network Output</h3>
-                <pre className="text-xs text-gray-400 overflow-auto max-h-[600px] bg-gray-950 rounded-lg p-4">
+                <pre className="font-mono text-xs text-white/50 overflow-auto max-h-[600px] bg-gray-950 rounded-lg p-4">
                   {JSON.stringify(result, null, 2)}
                 </pre>
               </div>

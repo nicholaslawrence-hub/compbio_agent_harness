@@ -14,8 +14,8 @@ const CustomTooltip = ({ active, payload }) => {
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
       <p className="font-bold text-white">{d.gene}</p>
-      <p className="text-gray-400">log2FC: <span className="text-white">{d.x?.toFixed(3)}</span></p>
-      <p className="text-gray-400">-log10(padj): <span className="text-white">{d.y?.toFixed(3)}</span></p>
+      <p className="text-white/50">log2FC: <span className="text-white">{d.x?.toFixed(3)}</span></p>
+      <p className="text-white/50">-log10(padj): <span className="text-white">{d.y?.toFixed(3)}</span></p>
     </div>
   )
 }

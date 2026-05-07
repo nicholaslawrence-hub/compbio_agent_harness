@@ -11,7 +11,7 @@ function NoveltyBar({ score }) {
       <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-gray-300 w-20 text-right tabular-nums">{label} ({pct}%)</span>
+      <span className="text-xs text-white/80 w-20 text-right tabular-nums">{label} ({pct}%)</span>
     </div>
   )
 }
@@ -123,16 +123,16 @@ export default function HypothesisCard({ hypothesis, rank }) {
       {/* Body */}
       <div className="space-y-4">
         <div>
-          <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5">Hypothesis</p>
-          <p className="text-sm text-gray-200 leading-relaxed">
+          <p className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Hypothesis</p>
+          <p className="text-sm text-white leading-relaxed">
             <InlineMarkdown text={text} />
           </p>
         </div>
 
         {mechanism && (
           <div>
-            <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5">Proposed Mechanism</p>
-            <p className="text-sm text-gray-300 leading-relaxed">
+            <p className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Proposed Mechanism</p>
+            <p className="text-sm text-white/80 leading-relaxed">
               <InlineMarkdown text={mechanism} />
             </p>
           </div>
@@ -144,10 +144,10 @@ export default function HypothesisCard({ hypothesis, rank }) {
           )
           return cleanedEvidence.length > 0 ? (
             <div>
-              <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5">Supporting Evidence</p>
+              <p className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Supporting Evidence</p>
               <ul className="space-y-1.5">
                 {cleanedEvidence.map((ev, i) => (
-                  <li key={i} className="text-xs text-gray-400 flex items-start gap-2">
+                  <li key={i} className="text-xs text-white/50 flex items-start gap-2">
                     <span className="text-indigo-500 mt-0.5 shrink-0">•</span>
                     <InlineMarkdown text={ev} />
                   </li>
@@ -159,7 +159,7 @@ export default function HypothesisCard({ hypothesis, rank }) {
 
         {key_pmids?.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+            <p className="text-sm font-semibold text-white uppercase tracking-wide mb-2 flex items-center gap-1.5">
               <BookOpen size={11} /> References
             </p>
             <div className="flex flex-wrap gap-1.5">
