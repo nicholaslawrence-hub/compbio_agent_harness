@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 # RNAgent — Agentic RNA-Seq Drug Discovery
-=======
-# Agentic Network for RNA-Seq Drug Discovery
->>>>>>> 3751c75a28f117a9b11af4e808c6841963a9c432
 
 I built this as a personal project to explore what an AI-powered bioinformatics workflow could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and a coordinated network of specialist agents runs the whole drug-target discovery workflow automatically — differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
 
