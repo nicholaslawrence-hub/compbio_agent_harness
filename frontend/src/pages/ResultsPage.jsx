@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { ChevronLeft, Download, RefreshCw } from 'lucide-react'
@@ -217,12 +217,12 @@ export default function ResultsPage() {
           {/* Header */}
           <div className="flex items-center gap-3">
             <RefreshCw size={18} className="text-indigo-400 animate-spin shrink-0" />
-            <h2 className="text-lg font-bold text-slate-100 tracking-tight">Analysis Running</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">Analysis Running</h2>
             <span className="text-base text-indigo-300/80 font-mono font-semibold ml-1">
               {job?.progress ?? 0}%
             </span>
             {elapsed > 0 && (
-              <span className="text-xs text-slate-600 font-mono ml-auto">
+              <span className="text-xs text-white/30 font-mono ml-auto">
                 {formatElapsed(elapsed)} elapsed
               </span>
             )}
@@ -243,11 +243,11 @@ export default function ResultsPage() {
               {visibleTerminalLines.map((line, i) => (
                 <div
                   key={i}
-                  className={i === visibleTerminalLines.length - 1 ? 'text-slate-300' : 'text-slate-600'}
+                  className={i === visibleTerminalLines.length - 1 ? 'text-white/80' : 'text-white/30'}
                 >
                   {line}
                   {i === visibleTerminalLines.length - 1 && (
-                    <span className="cursor-blink text-slate-500 ml-0.5">█</span>
+                    <span className="cursor-blink text-white/40 ml-0.5">█</span>
                   )}
                 </div>
               ))}
@@ -258,9 +258,9 @@ export default function ResultsPage() {
           {supervisorLog.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Agent Reasoning</span>
+                <span className="text-[10px] font-bold tracking-widest uppercase text-white/40">Agent Reasoning</span>
                 <div className="flex-1 h-px bg-slate-800" />
-                <span className="text-[10px] text-slate-600 tabular-nums">{supervisorLog.length} step{supervisorLog.length !== 1 ? 's' : ''}</span>
+                <span className="text-[10px] text-white/30 tabular-nums">{supervisorLog.length} step{supervisorLog.length !== 1 ? 's' : ''}</span>
               </div>
               <div
                 ref={agentLogRef}
@@ -280,11 +280,11 @@ export default function ResultsPage() {
                         <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot} ${isNewest ? 'animate-pulse' : ''}`} />
                         <span className={`font-semibold text-[10px] uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
                         {entry.subquery && entry.subquery !== 'all top genes' && (
-                          <span className="text-slate-500 text-[10px] font-mono truncate max-w-[140px]">→ {entry.subquery}</span>
+                          <span className="text-white/40 text-[10px] font-mono truncate max-w-[140px]">→ {entry.subquery}</span>
                         )}
                         <span className="ml-auto text-slate-700 text-[10px] tabular-nums">#{i + 1}</span>
                       </div>
-                      <p className={`leading-relaxed pl-3.5 ${isNewest ? 'text-slate-300' : 'text-slate-500'}`}>
+                      <p className={`leading-relaxed pl-3.5 ${isNewest ? 'text-white/80' : 'text-white/40'}`}>
                         {entry.summary}
                       </p>
                     </div>
@@ -316,7 +316,7 @@ export default function ResultsPage() {
                 key={t}
                 onClick={() => setTab(t)}
                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-800' : 'text-slate-500 hover:text-gray-300'
+                  tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-800' : 'text-white/40 hover:text-gray-300'
                 }`}
               >
                 {t}
@@ -336,7 +336,7 @@ export default function ResultsPage() {
                   Ranked by novelty score. Higher = fewer PubMed hits, lower OpenTargets evidence, no ChEMBL drugs. Computed as 1 - log10(pub_count) / 4.
                 </p>
                 {hypotheses.length === 0
-                  ? <p className="text-slate-500 text-sm text-center py-12">No hypotheses generated yet.</p>
+                  ? <p className="text-white/40 text-sm text-center py-12">No hypotheses generated yet.</p>
                   : hypotheses
                       .slice()
                       .sort((a, b) => (b.novelty_score ?? 0) - (a.novelty_score ?? 0))
@@ -354,7 +354,7 @@ export default function ResultsPage() {
                 <div className="card">
                   <h3 className="text-sm font-semibold text-white mb-4">
                     Top Upregulated Genes
-                    <span className="ml-2 text-xs text-slate-500">({dgeResults.length} genes)</span>
+                    <span className="ml-2 text-xs text-white/40">({dgeResults.length} genes)</span>
                   </h3>
                   <DGETable results={dgeResults} />
                 </div>
@@ -373,7 +373,7 @@ export default function ResultsPage() {
                 </div>
                 {report
                   ? <div className="prose-dark"><ReactMarkdown>{report}</ReactMarkdown></div>
-                  : <p className="text-slate-500 text-sm text-center py-12">Report not yet generated.</p>
+                  : <p className="text-white/40 text-sm text-center py-12">Report not yet generated.</p>
                 }
               </div>
             )}
@@ -392,7 +392,7 @@ export default function ResultsPage() {
 
       {!isRunning && !error && hypotheses.length === 0 && dgeResults.length === 0 && (
         <div className="card text-center py-16">
-          <p className="text-slate-500">Waiting for results…</p>
+          <p className="text-white/40">Waiting for results…</p>
         </div>
       )}
     </div>

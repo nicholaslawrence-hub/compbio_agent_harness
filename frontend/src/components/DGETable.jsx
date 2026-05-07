@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { ArrowUpDown, Download } from 'lucide-react'
 
 function exportCSV(rows) {
@@ -42,14 +42,14 @@ export default function DGETable({ results = [] }) {
     </th>
   )
 
-  if (!results.length) return <p className="text-sm text-slate-500 text-center py-8">No DGE results yet.</p>
+  if (!results.length) return <p className="text-sm text-white/40 text-center py-8">No DGE results yet.</p>
 
   return (
     <div>
       <div className="flex justify-end mb-2">
         <button
           onClick={() => exportCSV(sorted)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
+          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
         >
           <Download size={12} /> Export CSV
         </button>
@@ -88,7 +88,7 @@ export default function DGETable({ results = [] }) {
                   {Number(row.pvalue ?? 1).toExponential(2)}
                 </td>
                 <td className="px-4 py-2.5">
-                  <span className={`font-mono text-xs ${isSignificant ? 'text-indigo-400' : 'text-slate-500'}`}>
+                  <span className={`font-mono text-xs ${isSignificant ? 'text-indigo-400' : 'text-white/40'}`}>
                     {padj.toExponential(2)}
                   </span>
                   {isSignificant && <span className="ml-2 text-xs text-indigo-600">*</span>}

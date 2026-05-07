@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+﻿import { useRef, useEffect, useState, useCallback } from 'react'
 
 const VW = 720, VH = 490
 const CX = VW / 2, CY = VH / 2
@@ -459,7 +459,7 @@ export default function AgentWeb() {
             <span className="text-base font-semibold text-white">{chat.header}</span>
             <span className="hidden sm:block text-sm text-white/60 flex-1 leading-snug">{chat.desc}</span>
             <button onClick={() => setSelected(null)}
-              className="text-slate-400 hover:text-white transition-colors text-2xl leading-none ml-auto shrink-0 pl-4"
+              className="text-white/50 hover:text-white transition-colors text-2xl leading-none ml-auto shrink-0 pl-4"
             >×</button>
           </div>
 

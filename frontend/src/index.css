@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-200 antialiased;
+    @apply bg-slate-950 text-white antialiased;
     font-family: 'DM Sans', sans-serif;
   }
   code, pre, .font-mono {
@@ -20,19 +20,19 @@
     @apply bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm;
   }
   .btn-secondary {
-    @apply bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-4 py-2 rounded-md transition-colors text-sm;
+    @apply bg-slate-800 hover:bg-slate-700 text-white/80 font-medium px-4 py-2 rounded-md transition-colors text-sm;
   }
   .label {
-    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide;
+    @apply block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wide;
   }
   .input {
-    @apply w-full bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500;
+    @apply w-full bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500;
   }
   .badge-dark {
     @apply inline-flex items-center gap-1 bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2 py-0.5 rounded;
   }
   .badge-known {
-    @apply inline-flex items-center gap-1 bg-slate-800 text-slate-300 border border-slate-700 text-xs px-2 py-0.5 rounded;
+    @apply inline-flex items-center gap-1 bg-slate-800 text-white/70 border border-slate-700 text-xs px-2 py-0.5 rounded;
   }
   .badge-oncogene {
     @apply inline-flex items-center gap-1 bg-red-950 text-red-400 border border-red-900 text-xs px-2 py-0.5 rounded;
@@ -93,14 +93,14 @@
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
+::-webkit-scrollbar-thumb { @apply bg-white/20 rounded-full; }
 
-.prose-dark h1, .prose-dark h2, .prose-dark h3 { @apply text-slate-100 font-semibold mt-6 mb-2; }
+.prose-dark h1, .prose-dark h2, .prose-dark h3 { @apply text-white font-semibold mt-6 mb-2; }
 .prose-dark h1 { @apply text-xl; }
 .prose-dark h2 { @apply text-lg border-b border-slate-800 pb-1.5; }
-.prose-dark h3 { @apply text-base text-slate-300; }
-.prose-dark p { @apply text-slate-400 mb-3 leading-relaxed text-sm; }
-.prose-dark ul { @apply list-disc list-inside text-slate-400 mb-3 space-y-1; }
+.prose-dark h3 { @apply text-base text-white/70; }
+.prose-dark p { @apply text-white/60 mb-3 leading-relaxed text-sm; }
+.prose-dark ul { @apply list-disc list-inside text-white/60 mb-3 space-y-1; }
 .prose-dark li { @apply text-sm; }
-.prose-dark strong { @apply text-slate-200 font-semibold; }
+.prose-dark strong { @apply text-white font-semibold; }
 .prose-dark code { @apply bg-slate-800 text-indigo-300 px-1.5 py-0.5 rounded text-xs; }

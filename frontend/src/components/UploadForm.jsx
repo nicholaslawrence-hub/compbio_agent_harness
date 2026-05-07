@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useNavigate } from 'react-router-dom'
 import { FileSpreadsheet, AlertCircle, Plus, Trash2, X } from 'lucide-react'
@@ -22,7 +22,7 @@ function parsePastedConditions(text) {
 }
 
 const LABEL = ({ children }) => (
-  <p className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-2">{children}</p>
+  <p className="text-xs font-mono uppercase tracking-widest text-white/50 mb-2">{children}</p>
 )
 
 export default function UploadForm() {
@@ -113,13 +113,13 @@ export default function UploadForm() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white leading-tight">{file.name}</p>
-                  <p className="text-xs text-slate-500 font-mono">{(file.size / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs text-white/40 font-mono">{(file.size / 1024).toFixed(1)} KB</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setFile(null) }}
-                className="text-slate-600 hover:text-slate-300 transition-colors p-1"
+                className="text-white/30 hover:text-white/80 transition-colors p-1"
               >
                 <X size={14} />
               </button>
@@ -127,13 +127,13 @@ export default function UploadForm() {
           ) : (
             <div className={`flex items-center gap-4 px-5 py-5 ${isDragActive ? 'p-5' : ''}`}>
               <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                <FileSpreadsheet size={18} className="text-slate-500" />
+                <FileSpreadsheet size={18} className="text-white/40" />
               </div>
               <div>
                 <p className="text-sm font-medium text-white">
                   {isDragActive ? 'Drop to upload' : 'Drop your file here or click to browse'}
                 </p>
-                <p className="text-xs text-slate-500 font-mono mt-0.5">.tsv · .csv · .txt — rows = genes, cols = samples</p>
+                <p className="text-xs text-white/40 font-mono mt-0.5">.tsv · .csv · .txt — rows = genes, cols = samples</p>
               </div>
             </div>
           )}
@@ -166,7 +166,7 @@ export default function UploadForm() {
             />
           </div>
           <div className="flex items-center justify-center">
-            <span className="text-xs font-bold text-slate-600 tracking-widest">VS</span>
+            <span className="text-xs font-bold text-white/30 tracking-widest">VS</span>
           </div>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 pointer-events-none" />
@@ -188,7 +188,7 @@ export default function UploadForm() {
             <button
               type="button"
               onClick={() => { setPasteMode(!pasteMode); setPasteError('') }}
-              className="text-xs text-slate-400 hover:text-white transition-colors font-mono"
+              className="text-xs text-white/50 hover:text-white transition-colors font-mono"
             >
               {pasteMode ? '← manual' : 'paste from sheet'}
             </button>
@@ -249,7 +249,7 @@ export default function UploadForm() {
             ))}
           </div>
         )}
-        <p className="text-xs text-slate-600 font-mono mt-2">Names must match column headers exactly.</p>
+        <p className="text-xs text-white/30 font-mono mt-2">Names must match column headers exactly.</p>
       </div>
 
       {error && (

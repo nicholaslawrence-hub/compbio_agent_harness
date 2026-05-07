@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Github, Linkedin, Code2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
@@ -71,7 +71,7 @@ function AnimatedBar({ score, visible }) {
           }}
         />
       </div>
-      <span className="font-mono text-xs text-slate-500 w-8 text-right">{score.toFixed(2)}</span>
+      <span className="font-mono text-xs text-white/40 w-8 text-right">{score.toFixed(2)}</span>
     </div>
   )
 }
@@ -137,7 +137,7 @@ export default function AnalyzePage() {
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <div className="pt-8 sm:pt-16 pb-4">
-        <h1 className="text-[2.6rem] leading-tight sm:text-6xl lg:text-8xl sm:leading-[1.06] font-bold text-slate-100 mb-5 sm:mb-8 tracking-tight">
+        <h1 className="text-[2.6rem] leading-tight sm:text-6xl lg:text-8xl sm:leading-[1.06] font-bold text-white mb-5 sm:mb-8 tracking-tight">
           From count matrix<br />
           <span className="text-amber-400">
             to{' '}
@@ -169,7 +169,7 @@ export default function AnalyzePage() {
               </button>
               <Link
                 to="/login"
-                className="border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-slate-100 font-semibold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
+                className="border border-slate-600 hover:border-slate-400 text-white/80 hover:text-white font-semibold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
               >
                 Log in / Sign up
               </Link>
@@ -181,7 +181,7 @@ export default function AnalyzePage() {
       {/* ── Agent Network ────────────────────────────────────── */}
       <div className="border-t border-slate-800 pt-14">
         <p className="text-2xl font-semibold text-white mb-2">Agent Network</p>
-        <p className="text-sm text-slate-300 mb-8">
+        <p className="text-sm text-white/80 mb-8">
           A supervisor orchestrates seven specialist agents in parallel. Click any node to inspect its role.
         </p>
         <AgentWeb />
@@ -220,7 +220,7 @@ export default function AnalyzePage() {
 
                     <div className="flex items-baseline justify-between mb-3">
                       <span className={`text-2xl font-bold tracking-tight transition-colors duration-200 ${
-                        isActive ? 'text-white' : 'text-slate-200'
+                        isActive ? 'text-white' : 'text-white'
                       }`}>
                         {g.symbol}
                       </span>
@@ -249,7 +249,7 @@ export default function AnalyzePage() {
               <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="text-3xl">←</div>
                 <p className="text-base font-semibold text-white">Click a gene</p>
-                <p className="text-sm text-slate-300 max-w-[200px] leading-relaxed">
+                <p className="text-sm text-white/80 max-w-[200px] leading-relaxed">
                   Select any target on the left to see the generated mechanism and evidence.
                 </p>
               </div>
@@ -305,7 +305,7 @@ export default function AnalyzePage() {
             href="https://www.linkedin.com/in/nicholas-lawrence-a16122296/"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 border border-slate-500 hover:border-slate-300 text-slate-200 hover:text-white text-sm px-6 py-3 rounded-xl transition-colors duration-150"
+            className="flex items-center gap-2 border border-slate-500 hover:border-slate-300 text-white hover:text-white text-sm px-6 py-3 rounded-xl transition-colors duration-150"
           >
             <Linkedin size={14} strokeWidth={1.5} />
             Nicholas Lawrence

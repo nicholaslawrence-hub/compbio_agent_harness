@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Star, ExternalLink, Copy, Check, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
@@ -45,7 +45,7 @@ function CopyButton({ text }) {
     <button
       onClick={handleCopy}
       title="Copy to clipboard"
-      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-2.5 py-1.5 rounded-lg transition-colors"
+      className="flex items-center gap-1 text-xs text-white/40 hover:text-white border border-slate-800 hover:border-slate-600 px-2.5 py-1.5 rounded-lg transition-colors"
     >
       {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
       {copied ? 'Copied' : 'Copy'}
@@ -106,12 +106,12 @@ export default function HypothesisCard({ hypothesis, rank }) {
               </a>
             </h3>
             <div className="mt-1.5 flex items-center gap-2">
-              <span className="text-xs text-slate-400">Novelty</span>
+              <span className="text-xs text-white/50">Novelty</span>
               <div className="w-40">
                 <NoveltyBar score={novelty_score ?? 0} />
               </div>
               {pub_count != null && pub_count >= 0 && (
-                <span className="text-xs text-slate-300 font-semibold tabular-nums whitespace-nowrap">
+                <span className="text-xs text-white/80 font-semibold tabular-nums whitespace-nowrap">
                   {pub_count.toLocaleString()} pub{pub_count !== 1 ? 's' : ''}
                 </span>
               )}
@@ -123,7 +123,7 @@ export default function HypothesisCard({ hypothesis, rank }) {
       {/* Body */}
       <div className="space-y-4">
         <div>
-          <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Hypothesis</p>
+          <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5">Hypothesis</p>
           <p className="text-sm text-gray-200 leading-relaxed">
             <InlineMarkdown text={text} />
           </p>
@@ -131,7 +131,7 @@ export default function HypothesisCard({ hypothesis, rank }) {
 
         {mechanism && (
           <div>
-            <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Proposed Mechanism</p>
+            <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5">Proposed Mechanism</p>
             <p className="text-sm text-gray-300 leading-relaxed">
               <InlineMarkdown text={mechanism} />
             </p>
@@ -144,7 +144,7 @@ export default function HypothesisCard({ hypothesis, rank }) {
           )
           return cleanedEvidence.length > 0 ? (
             <div>
-              <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Supporting Evidence</p>
+              <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5">Supporting Evidence</p>
               <ul className="space-y-1.5">
                 {cleanedEvidence.map((ev, i) => (
                   <li key={i} className="text-xs text-gray-400 flex items-start gap-2">
@@ -159,7 +159,7 @@ export default function HypothesisCard({ hypothesis, rank }) {
 
         {key_pmids?.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <BookOpen size={11} /> References
             </p>
             <div className="flex flex-wrap gap-1.5">

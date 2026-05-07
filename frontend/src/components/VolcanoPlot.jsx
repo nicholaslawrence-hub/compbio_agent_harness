@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+﻿import { useRef } from 'react'
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
 import { Download } from 'lucide-react'
 
@@ -87,13 +87,13 @@ export default function VolcanoPlot({ results = [] }) {
       <div className="flex justify-end gap-2 mb-2">
         <button
           onClick={() => downloadSVG(containerRef.current)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
+          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
         >
           <Download size={12} /> SVG
         </button>
         <button
           onClick={() => downloadPNG(containerRef.current)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
+          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white border border-slate-800 hover:border-slate-600 px-3 py-1.5 rounded-lg transition-colors duration-150"
         >
           <Download size={12} /> PNG (2×)
         </button>

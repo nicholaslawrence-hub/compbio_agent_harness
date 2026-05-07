@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
@@ -77,7 +77,7 @@ export default function LoginPage() {
               className={`flex-1 py-3 text-base font-medium rounded-lg transition-colors duration-150 ${
                 tab === t
                   ? 'bg-amber-400 text-slate-900'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-white/50 hover:text-white'
               }`}
             >
               {t === 'login' ? 'Log in' : 'Sign up'}
@@ -105,7 +105,7 @@ export default function LoginPage() {
 
         <div className="flex items-center gap-3 mb-6">
           <div className="flex-1 h-px bg-slate-800" />
-          <span className="text-xs text-slate-500 font-medium">or</span>
+          <span className="text-xs text-white/40 font-medium">or</span>
           <div className="flex-1 h-px bg-slate-800" />
         </div>
 

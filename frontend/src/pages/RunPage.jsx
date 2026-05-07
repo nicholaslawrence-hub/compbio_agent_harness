@@ -1,4 +1,4 @@
-import UploadForm from '../components/UploadForm.jsx'
+﻿import UploadForm from '../components/UploadForm.jsx'
 
 const FIELD_DOCS = [
   {
@@ -36,7 +36,7 @@ export default function RunPage() {
       <div className="mb-10">
         <p className="text-xs font-mono uppercase tracking-[0.2em] text-amber-400/60 mb-2">New Analysis</p>
         <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 tracking-tight">Launch the agent network</h1>
-        <p className="text-base text-slate-300 max-w-lg">
+        <p className="text-base text-white/80 max-w-lg">
           Upload a count matrix and configure your experiment. Results are ready in minutes.
         </p>
       </div>
@@ -58,7 +58,7 @@ export default function RunPage() {
               {FIELD_DOCS.map(({ field, doc }) => (
                 <div key={field} className="border-b border-slate-800/60 pb-4 last:border-0 last:pb-0">
                   <p className="text-sm font-semibold text-white mb-1">{field}</p>
-                  <p className="text-sm text-slate-400 leading-relaxed">{doc}</p>
+                  <p className="text-sm text-white/50 leading-relaxed">{doc}</p>
                 </div>
               ))}
             </div>
@@ -71,7 +71,7 @@ export default function RunPage() {
               {TIPS.map((tip, i) => (
                 <li key={i} className="flex gap-3">
                   <span className="font-mono text-xs text-amber-400/40 pt-0.5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="text-sm text-slate-400 leading-relaxed">{tip}</span>
+                  <span className="text-sm text-white/50 leading-relaxed">{tip}</span>
                 </li>
               ))}
             </ul>
