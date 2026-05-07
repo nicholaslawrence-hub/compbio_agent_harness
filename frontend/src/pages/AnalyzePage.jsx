@@ -202,11 +202,11 @@ export default function AnalyzePage() {
   }, [])
 
   return (
-    <div className="space-y-24">
+    <div className="space-y-14 sm:space-y-24">
 
       {/* ── Hero ─────────────────────────────────────────────── */}
-      <div className="pt-16 pb-4">
-        <h1 className="text-8xl font-bold text-slate-100 leading-[1.06] mb-8 tracking-tight">
+      <div className="pt-8 sm:pt-16 pb-4">
+        <h1 className="text-[2.6rem] leading-tight sm:text-6xl lg:text-8xl sm:leading-[1.06] font-bold text-slate-100 mb-5 sm:mb-8 tracking-tight">
           From count matrix<br />
           <span className="text-amber-400">
             to{' '}
@@ -214,17 +214,17 @@ export default function AnalyzePage() {
             <span className="inline-block w-[3px] cursor-blink">_</span>
           </span>
         </h1>
-        <p className="text-lg text-slate-200 max-w-xl leading-relaxed">
+        <p className="text-base sm:text-lg text-slate-200 max-w-xl leading-relaxed">
           Upload an RNA-seq count matrix and a disease context. The pipeline runs
           differential expression, maps protein interaction networks, mines the
           literature, annotates known drugs, and synthesizes ranked hypotheses
           end to end, without leaving the browser.
         </p>
-        <div className="flex items-center justify-center gap-4 mt-20">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-10 sm:mt-20">
           {user ? (
             <button
               onClick={() => navigate('/run')}
-              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-2xl px-24 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl sm:text-2xl px-10 sm:px-24 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
             >
               Start Analysis
             </button>
@@ -232,13 +232,13 @@ export default function AnalyzePage() {
             <>
               <button
                 onClick={() => navigate('/run')}
-                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight shadow-[0_0_28px_rgba(251,191,36,0.30)]"
+                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight shadow-[0_0_28px_rgba(251,191,36,0.30)] text-center"
               >
                 Try the Pipeline
               </button>
               <Link
                 to="/login"
-                className="border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-slate-100 font-semibold text-xl px-14 py-6 rounded-2xl transition-colors duration-150 tracking-tight"
+                className="border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-slate-100 font-semibold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
               >
                 Log in / Sign up
               </Link>
@@ -249,7 +249,7 @@ export default function AnalyzePage() {
 
       {/* ── Example use-case ─────────────────────────────────── */}
       <div>
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
           {/* ── Left: gene list ── */}
           <div
@@ -286,9 +286,9 @@ export default function AnalyzePage() {
                       }`}>
                         {g.symbol}
                       </span>
-                      <div className="flex font-mono tabular-nums text-sm text-slate-400">
-                        <span className="w-24 text-right">log₂FC {g.lfc}</span>
-                        <span className="w-28 text-right">padj {g.padj}</span>
+                      <div className="flex flex-wrap font-mono tabular-nums text-xs sm:text-sm text-slate-400 gap-x-3">
+                        <span>log₂FC {g.lfc}</span>
+                        <span>padj {g.padj}</span>
                       </div>
                     </div>
 
@@ -350,11 +350,11 @@ export default function AnalyzePage() {
       <div className="border-t border-slate-800 pt-14">
         <p className="text-2xl font-semibold text-slate-400 mb-10">Data Pipeline</p>
 
-        <div ref={containerRef} className="relative flex gap-40 items-stretch">
+        <div ref={containerRef} className="relative flex flex-col sm:flex-row sm:gap-40 gap-8 items-stretch">
 
           {line && (
             <svg
-              className="absolute inset-0 pointer-events-none"
+              className="absolute inset-0 pointer-events-none hidden sm:block"
               style={{ width: '100%', height: '100%', overflow: 'visible' }}
             >
               <path
@@ -367,7 +367,7 @@ export default function AnalyzePage() {
             </svg>
           )}
 
-          <div className="shrink-0 w-80 flex flex-col z-10">
+          <div className="shrink-0 sm:w-80 w-full flex flex-col z-10">
             {STEPS.map((step, i) => {
               const isActive = activeStep === step.n
               const isLast   = i === STEPS.length - 1
@@ -397,10 +397,10 @@ export default function AnalyzePage() {
                     ref={el => { labelRefs.current[i] = el }}
                     type="button"
                     onClick={() => toggle(step.n)}
-                    className={`inline-block text-left leading-snug whitespace-nowrap transition-all duration-300 ${
+                    className={`inline-block text-left leading-snug transition-all duration-300 ${
                       isActive
-                        ? 'text-2xl font-semibold text-slate-100 pt-2'
-                        : 'text-lg font-medium text-slate-500 hover:text-slate-300 pt-2'
+                        ? 'text-xl sm:text-2xl font-semibold text-slate-100 pt-2'
+                        : 'text-base sm:text-lg font-medium text-slate-500 hover:text-slate-300 pt-2'
                     }`}
                   >
                     {step.label}
@@ -410,13 +410,12 @@ export default function AnalyzePage() {
             })}
           </div>
 
-          <div className="flex-1 flex items-center z-10">
+          <div className="flex-1 flex items-start sm:items-center z-10">
             <div
               ref={bubbleRef}
-              className={`w-full rounded-xl p-8 transition-all duration-300 ${
-                activeStep ? 'border border-slate-800 bg-slate-900' : 'border border-transparent bg-transparent'
+              className={`w-full rounded-xl p-5 sm:p-8 transition-all duration-300 ${
+                activeStep ? 'border border-slate-800 bg-slate-900' : 'border border-transparent bg-transparent sm:min-h-[260px]'
               }`}
-              style={{ minHeight: '260px' }}
             >
               {activeStep && (
                 <div>

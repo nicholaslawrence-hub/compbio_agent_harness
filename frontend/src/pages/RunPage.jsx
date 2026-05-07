@@ -37,7 +37,7 @@ export default function RunPage() {
         <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-600 mb-6">Input reference</p>
         <div>
           {FIELD_DOCS.map(({ field, doc }) => (
-            <div key={field} className="grid grid-cols-[200px_1fr] gap-x-12 py-5 border-b border-slate-800/50 last:border-0">
+            <div key={field} className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-x-12 gap-y-1 py-5 border-b border-slate-800/50 last:border-0">
               <span className="text-sm font-medium text-slate-300 pt-0.5">{field}</span>
               <span className="text-sm text-slate-500 leading-relaxed">{doc}</span>
             </div>
