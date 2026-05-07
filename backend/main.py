@@ -17,7 +17,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://your-project.vercel.app",
+        "https://compbio-agent-harness.vercel.app",
         "http://localhost:5173",
     ]
 )
