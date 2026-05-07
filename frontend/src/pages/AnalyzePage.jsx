@@ -9,6 +9,21 @@ const PHRASES = [
   'clinical insights.',
   'therapeutic leads.',
   'mechanistic evidence.',
+  'ranked gene candidates.',
+  'a publishable report.',
+  'dark gene discoveries.',
+  'PPI network analysis.',
+  'ChEMBL drug matches.',
+  'pathway enrichment.',
+  'novelty scores.',
+  'literature synthesis.',
+  'research directions.',
+  'a drug target.',
+  'actionable biology.',
+  'biomarker candidates.',
+  'oncogene networks.',
+  'a scientific narrative.',
+  'the next experiment.',
 ]
 
 const STEPS = [
@@ -28,13 +43,13 @@ const STEPS = [
     n: 3,
     label: 'Protein Interaction Network',
     detail:
-      'Top upregulated genes are queried against the STRING database to map protein–protein interaction networks. High-confidence partners are scored and cross-referenced against a curated oncogene list — surfacing which of your hits are wired into known disease driver networks and which connections are therapeutically exploitable.',
+      'Top upregulated genes are queried against the STRING database (confidence ≥ 700) to map interaction networks. A single batch call to MyGene.info then annotates every focal gene and its top partners with GO Molecular Function terms — so the LLM sees "KRAS (GTPase activity)" rather than just a symbol. Partners are cross-referenced against a curated oncogene list to identify which connections are therapeutically exploitable.',
   },
   {
     n: 4,
     label: 'Literature RAG',
     detail:
-      'Abstracts are fetched live from PubMed and Semantic Scholar, then upserted into a Pinecone vector index. The index is semantically searched to pull the most relevant passages per gene. Genes returning fewer than three meaningful hits are flagged as dark genes — under-studied targets with a less competitive drug discovery landscape.',
+      'Abstracts are fetched live from PubMed and Semantic Scholar, then upserted into a Pinecone vector index. The index is semantically searched to pull the most relevant passages per gene. When a gene returns fewer than three direct hits, the agent automatically retries with a "{gene} AND {top interactor}" query — allowing it to surface indirect evidence through network neighbours. Genes still returning sparse results are flagged as dark genes.',
   },
   {
     n: 5,
@@ -46,7 +61,7 @@ const STEPS = [
     n: 6,
     label: 'Hypothesis Synthesis',
     detail:
-      'GPT-5.4-mini receives the combined DGE statistics, pathway context, PPI network, literature passages, and drug landscape for each prioritized gene. Chain-of-thought reasoning produces a structured hypothesis: proposed mechanism of action, supporting evidence, and a novelty score 0–1. Dark genes connected to oncogene networks with no existing drugs surface at the top.',
+      'GPT-5.4-mini receives the combined DGE statistics, GO Molecular Function terms, confirmed Reactome pathway memberships, annotated PPI network, literature passages, and drug landscape for each gene. Chain-of-thought reasoning produces a structured hypothesis naming at least two specific interaction partners and a concrete molecular event — phosphorylation site, complex dissociation, or transcriptional target. Dark genes with no existing drugs surface at the top.',
   },
   {
     n: 7,

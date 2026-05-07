@@ -110,10 +110,12 @@ export default function HypothesisCard({ hypothesis, rank }) {
               <div className="w-40">
                 <NoveltyBar score={novelty_score ?? 0} />
               </div>
+              {pub_count != null && pub_count >= 0 && (
+                <span className="text-xs text-slate-300 font-semibold tabular-nums whitespace-nowrap">
+                  {pub_count.toLocaleString()} pub{pub_count !== 1 ? 's' : ''}
+                </span>
+              )}
             </div>
-            {pub_count != null && pub_count >= 0 && (
-              <p className="text-xs text-slate-600 mt-0.5">{pub_count.toLocaleString()} cancer publications</p>
-            )}
           </div>
         </div>
       </div>
@@ -136,19 +138,24 @@ export default function HypothesisCard({ hypothesis, rank }) {
           </div>
         )}
 
-        {supporting_evidence?.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Supporting Evidence</p>
-            <ul className="space-y-1.5">
-              {supporting_evidence.map((ev, i) => (
-                <li key={i} className="text-xs text-gray-400 flex items-start gap-2">
-                  <span className="text-indigo-500 mt-0.5 shrink-0">•</span>
-                  <InlineMarkdown text={ev} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {(() => {
+          const cleanedEvidence = (supporting_evidence ?? []).filter(
+            ev => !ev.toLowerCase().includes('database query returned no results')
+          )
+          return cleanedEvidence.length > 0 ? (
+            <div>
+              <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Supporting Evidence</p>
+              <ul className="space-y-1.5">
+                {cleanedEvidence.map((ev, i) => (
+                  <li key={i} className="text-xs text-gray-400 flex items-start gap-2">
+                    <span className="text-indigo-500 mt-0.5 shrink-0">•</span>
+                    <InlineMarkdown text={ev} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null
+        })()}
 
         {key_pmids?.length > 0 && (
           <div>
@@ -167,22 +174,24 @@ export default function HypothesisCard({ hypothesis, rank }) {
       {/* Action bar */}
       <div className="mt-4 pt-3 border-t border-gray-800 flex items-center gap-2">
         <CopyButton text={cardText} />
-        <a
-          href={`https://www.genecards.org/cgi-bin/carddisp.pl?gene=${gene}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-2.5 py-1.5 rounded-lg transition-colors"
-        >
-          <ExternalLink size={11} /> GeneCards
-        </a>
-        <a
-          href={`https://www.uniprot.org/uniprot/?query=${gene}+AND+organism_id:9606`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-200 border border-slate-800 hover:border-slate-600 px-2.5 py-1.5 rounded-lg transition-colors"
-        >
-          <ExternalLink size={11} /> UniProt
-        </a>
+        <div className="ml-auto flex items-center gap-1.5">
+          <a
+            href={`https://www.genecards.org/cgi-bin/carddisp.pl?gene=${gene}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 hover:border-indigo-700 bg-indigo-950/30 hover:bg-indigo-950/60 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            GeneCards <ExternalLink size={10} />
+          </a>
+          <a
+            href={`https://www.uniprot.org/uniprot/?query=${gene}+AND+organism_id:9606`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 hover:border-indigo-700 bg-indigo-950/30 hover:bg-indigo-950/60 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            UniProt <ExternalLink size={10} />
+          </a>
+        </div>
       </div>
     </div>
   )
