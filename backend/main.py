@@ -16,10 +16,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "https://your-project.vercel.app",
+        "http://localhost:5173",
+    ]
 )
 
 app.include_router(router, prefix="/api/v1")
