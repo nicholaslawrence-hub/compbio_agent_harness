@@ -1,6 +1,6 @@
 # RNAgent — Agentic RNA-Seq Drug Discovery
 
-I built this as a personal project to explore what an AI-powered bioinformatics workflow could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and a coordinated network of specialist agents runs the whole drug-target discovery workflow automatically — differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
+I built this as a personal project to explore what an AI-powered bioinformatics workflow could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and a coordinated network of specialist agents runs the whole drug-target discovery workflow automatically, differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
 
 It's still a work in progress, but it's fully functional and deployed. I'd recommend testing it with the included sample data since it's calibrated to surface genuinely understudied genes rather than just returning EGFR and KRAS every time.
 
@@ -28,7 +28,7 @@ Count Matrix + Disease Term
 [7] Report Generation              Markdown executive summary with ranked targets + evidence
 ```
 
-There's a supervisor agent at the centre that decides which specialist tools to call and in what order, based on what's been gathered so far. It's not a fixed directed graph — the supervisor looks at the accumulated evidence each iteration and routes dynamically, so the actual execution path varies per run. Nodes 3-5 run in parallel across genes using `ThreadPoolExecutor` so it doesn't take forever.
+There's a supervisor agent at the centre that decides which specialist tools to call and in what order, based on what's been gathered so far. It's not a fixed directed graph, since the supervisor looks at the accumulated evidence each iteration and routes dynamically, so the actual execution path varies per run. Nodes 3-5 run in parallel across genes using `ThreadPoolExecutor` so it doesn't take forever. The tools are split into three clusters that respectively involve common bioinformatics tools to both align RNA-sequences, notice genes that aren't targeted in current drug prototypes or clinical trials, and a synthesis/hypothesizing cluster that will return the final result to the user. 
 
 ---
 
