@@ -1,6 +1,6 @@
-# PharmaGPT Agent — Agentic RNA-Seq Drug Discovery
+# RNAgent — Agentic RNA-Seq Drug Discovery
 
-I built this as a personal project to explore what an AI-powered bioinformatics pipeline could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and it runs the whole drug-target discovery workflow automatically, differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
+I built this as a personal project to explore what an AI-powered bioinformatics workflow could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and a coordinated network of specialist agents runs the whole drug-target discovery workflow automatically — differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
 
 It's still a work in progress, but it's fully functional and deployed. I'd recommend testing it with the included sample data since it's calibrated to surface genuinely understudied genes rather than just returning EGFR and KRAS every time.
 
@@ -8,7 +8,7 @@ It's still a work in progress, but it's fully functional and deployed. I'd recom
 
 ---
 
-## How the pipeline works
+## How the agent network works
 
 ```
 Count Matrix + Disease Term
@@ -28,7 +28,7 @@ Count Matrix + Disease Term
 [7] Report Generation              Markdown executive summary with ranked targets + evidence
 ```
 
-I wired this together as a LangGraph directed graph with conditional routing — if DGE fails, everything downstream gets skipped gracefully. Nodes 3-5 run in parallel across genes using `ThreadPoolExecutor` so it doesn't take forever.
+There's a supervisor agent at the centre that decides which specialist tools to call and in what order, based on what's been gathered so far. It's not a fixed directed graph — the supervisor looks at the accumulated evidence each iteration and routes dynamically, so the actual execution path varies per run. Nodes 3-5 run in parallel across genes using `ThreadPoolExecutor` so it doesn't take forever.
 
 ---
 
@@ -64,7 +64,7 @@ You'll need these environment variables in your `.env`:
 ```
 OPENAI_API_KEY=
 PINECONE_API_KEY=
-PINECONE_INDEX_NAME=pharmagpt-literature
+PINECONE_INDEX_NAME=rnagent-literature
 NCBI_EMAIL=you@example.com
 NCBI_API_KEY=                    # optional but recommended — raises the rate limit
 JWT_SECRET=<long-random-string>
@@ -88,7 +88,7 @@ VITE_API_BASE=https://your-backend.up.railway.app/api/v1
 
 ### Sample data
 
-I included a count matrix at `data/sample_counts.tsv` that I put together specifically so the pipeline produces interesting output. It mixes very dark genes (novelty > 0.85) with some well-known controls like EGFR and KRAS so you can see the novelty scoring actually differentiate between them.
+I included a count matrix at `data/sample_counts.tsv` that I put together specifically so the agent network produces interesting output. It mixes very dark genes (novelty > 0.85) with some well-known controls like EGFR and KRAS so you can see the novelty scoring actually differentiate between them.
 
 Paste this into the sample conditions field when running it:
 
@@ -104,8 +104,8 @@ S1:disease,S2:disease,S3:disease,S4:control,S5:control,S6:control
 compbio_agent_harness/
 ├── backend/
 │   ├── agents/
-│   │   ├── graph.py              # LangGraph pipeline definition + conditional routing
-│   │   ├── nodes.py              # Seven pipeline node functions (DGE -> Report)
+│   │   ├── graph.py              # LangGraph supervisor loop + tool registration
+│   │   ├── nodes.py              # Seven agent node functions (DGE -> Report)
 │   │   └── state.py              # AgentState TypedDict schema
 │   ├── api/
 │   │   ├── routes.py             # Analysis + gene lookup endpoints
@@ -132,7 +132,7 @@ compbio_agent_harness/
 │       ├── contexts/
 │       │   └── AuthContext.jsx   # Auth state, login/register/logout
 │       ├── pages/
-│       │   ├── AnalyzePage.jsx   # Landing page + animated pipeline explainer
+│       │   ├── AnalyzePage.jsx   # Landing page + interactive agent network explainer
 │       │   ├── RunPage.jsx       # Upload form + sample condition annotator
 │       │   ├── ResultsPage.jsx   # Live SSE progress + tabbed results
 │       │   ├── GeneLookupPage.jsx# Single-gene deep-dive (PPI, drugs, literature)
@@ -140,8 +140,9 @@ compbio_agent_harness/
 │       │   └── AccountPage.jsx   # Profile + analysis history
 │       ├── components/
 │       │   ├── Layout.jsx        # Navbar + footer
+│       │   ├── AgentWeb.jsx      # Force-directed agent network visualisation
 │       │   ├── HypothesisCard.jsx# Ranked therapeutic hypothesis display
-│       │   ├── ProgressBar.jsx   # SSE-driven pipeline progress indicator
+│       │   ├── ProgressBar.jsx   # SSE-driven progress indicator
 │       │   ├── DGETable.jsx      # Sortable differential expression table
 │       │   ├── UploadForm.jsx    # Drag-and-drop matrix upload
 │       │   └── VolcanoPlot.jsx   # Interactive volcano plot (D3)
@@ -164,7 +165,7 @@ compbio_agent_harness/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v1/analyze` | Start pipeline · multipart form (matrix file + metadata) |
+| `POST` | `/api/v1/analyze` | Launch agent network · multipart form (matrix file + metadata) |
 | `GET` | `/api/v1/jobs/{id}` | Poll job status and results |
 | `GET` | `/api/v1/jobs/{id}/stream` | SSE real-time progress stream |
 | `GET` | `/api/v1/jobs/{id}/report` | Markdown executive report |
