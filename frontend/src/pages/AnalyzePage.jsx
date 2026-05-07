@@ -4,27 +4,159 @@ import { Github, Linkedin, Code2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import AgentWeb from '../components/AgentWeb.jsx'
 
+const CLUSTERS = [
+  {
+    label: 'Expression Analysis',
+    color: 'text-sky-300',
+    divider: 'bg-sky-500/40',
+    description: 'The first pass — turning raw counts into ranked, statistically grounded gene candidates.',
+    agents: [
+      {
+        id: 'dge',
+        label: 'Differential Expression',
+        color: 'text-sky-300',
+        dot: 'bg-sky-400',
+        activeBg: 'bg-sky-950/40',
+        activeBorder: 'border-sky-500/70',
+        source: 'PyDESeq2',
+        tagline: 'Counts what changed and how much.',
+        description:
+          'PyDESeq2 fits a negative binomial GLM to your count matrix, using empirical Bayes dispersion shrinkage to stabilise estimates across genes with low counts. The output is a ranked list of upregulated genes, corrected for multiple testing with Benjamini-Hochberg. A plain t-test on normalised counts gets this wrong at small sample sizes. The GLM gets it right by modelling the variance structure RNA-seq data actually has.',
+      },
+      {
+        id: 'pathway',
+        label: 'Pathway Enrichment',
+        color: 'text-orange-300',
+        dot: 'bg-orange-400',
+        activeBg: 'bg-orange-950/40',
+        activeBorder: 'border-orange-500/70',
+        source: 'GSEApy / KEGG / GO',
+        tagline: 'Places your hits in the pathways that matter.',
+        description:
+          'Over-representation analysis runs against KEGG, GO Biological Process, and Reactome gene sets, using only genes detected in your matrix as the background universe. Benchmarking against the whole genome inflates significance for any study with a narrow detection range, so this matters. When the DEG count falls outside the ORA confidence range, the analysis switches automatically to GSEA preranking on the full differential expression scores. Redundant GO terms are collapsed by Jaccard similarity before anything reaches the report.',
+      },
+      {
+        id: 'ppi',
+        label: 'PPI Network',
+        color: 'text-indigo-300',
+        dot: 'bg-indigo-400',
+        activeBg: 'bg-indigo-950/40',
+        activeBorder: 'border-indigo-500/70',
+        source: 'STRING DB',
+        tagline: 'Which proteins your gene is physically talking to.',
+        description:
+          'Protein interactions are pulled from STRING at a combined confidence score of 700 or above, which keeps out low-quality co-expression inferences. Each partner gets cross-referenced against a curated oncogene set, so the supervisor can see immediately whether a dark gene sits next to well-known cancer drivers. GO molecular function terms add mechanistic context. A gene with no known function but three high-confidence oncogene neighbours is worth a harder look.',
+      },
+    ],
+  },
+  {
+    label: 'Target Validation',
+    color: 'text-rose-300',
+    divider: 'bg-rose-500/40',
+    description: 'The supervisor pulls from these tools in whatever order the evidence demands.',
+    agents: [
+      {
+        id: 'depmap',
+        label: 'DepMap CRISPR',
+        color: 'text-rose-300',
+        dot: 'bg-rose-400',
+        activeBg: 'bg-rose-950/40',
+        activeBorder: 'border-rose-500/70',
+        source: 'DepMap Portal',
+        tagline: 'What happens when you knock this gene out across 1,000 cancer lines.',
+        description:
+          'The DepMap Chronos scores tell you what happens when you knock a gene out across hundreds of cancer cell lines. Strongly selective essentiality means the gene is lethal in a cancer-type-specific way while normal tissue is spared. That is the target profile you want for a therapeutic. Broadly essential genes are flagged separately as on-target toxicity concerns. Low essentiality is not a dead end, but the supervisor weighs it when deciding how much further to investigate.',
+      },
+      {
+        id: 'opentargets',
+        label: 'OpenTargets',
+        color: 'text-violet-300',
+        dot: 'bg-violet-400',
+        activeBg: 'bg-violet-950/40',
+        activeBorder: 'border-violet-500/70',
+        source: 'OT Platform v4',
+        tagline: 'Seven evidence types in one score. The breakdown is what counts.',
+        description:
+          'The OpenTargets overall score aggregates genetic association, somatic mutation, clinical drug evidence, pathway membership, literature co-mention, RNA expression, and animal model data for every gene-disease pair. Decomposing the score matters: a gene that scores on somatic mutation and approved drugs is in a very different position from one whose score comes entirely from literature co-mention. The supervisor uses the breakdown, not just the headline number.',
+      },
+      {
+        id: 'literature',
+        label: 'Literature RAG',
+        color: 'text-cyan-300',
+        dot: 'bg-cyan-400',
+        activeBg: 'bg-cyan-950/40',
+        activeBorder: 'border-cyan-500/70',
+        source: 'Pinecone / PubMed',
+        tagline: 'Retrieves by meaning, not word match.',
+        description:
+          'Abstracts are fetched from PubMed and Semantic Scholar, then embedded server-side by Pinecone using llama-text-embed-v2 and stored in a dense vector index. At query time the system retrieves the top hits by cosine similarity, not keyword overlap, so it surfaces papers about a gene\'s mechanism even when the gene symbol does not appear in the title. Fewer than three strong hits and the gene is flagged dark — which is often the most interesting result.',
+      },
+    ],
+  },
+  {
+    label: 'Discovery',
+    color: 'text-amber-300',
+    divider: 'bg-amber-500/40',
+    description: 'Where evidence becomes a drug candidate and a testable scientific narrative.',
+    agents: [
+      {
+        id: 'drugs',
+        label: 'Drug Annotation',
+        color: 'text-emerald-300',
+        dot: 'bg-emerald-400',
+        activeBg: 'bg-emerald-950/40',
+        activeBorder: 'border-emerald-500/70',
+        source: 'ChEMBL / UniProt',
+        tagline: 'What is already in the clinic, and what has never been touched.',
+        description:
+          'ChEMBL is queried for binding assay compounds with pChEMBL at or above 5, corresponding to a rough potency ceiling of 10 micromolar. Results are sorted by clinical phase first, then by potency. No hits is itself a finding: high essentiality with a completely empty ChEMBL record is the white-space signature this tool is built to detect. UniProt fills in structural and functional annotation so the hypothesis step has something concrete to build on.',
+      },
+      {
+        id: 'synthesis',
+        label: 'Hypothesis Synthesis',
+        color: 'text-pink-300',
+        dot: 'bg-pink-400',
+        activeBg: 'bg-pink-950/40',
+        activeBorder: 'border-pink-500/70',
+        source: 'GPT-4o / PubMed',
+        tagline: 'One mechanistic hypothesis per target, not a summary.',
+        description:
+          'One hypothesis is generated per gene that survived supervisor pruning. The model reads the full accumulated investigation log rather than raw data structures, so the reasoning reflects everything the network discovered: PPI context, essentiality profile, OpenTargets scores, literature hits, drug landscape. Publication count is fetched fresh from PubMed at synthesis time and converted to a novelty score on a log scale, so a gene with 12 papers scores near 0.7 and one with 10,000 scores near zero. The output is a mechanistic narrative with proposed follow-up experiments, not a summary.',
+      },
+      {
+        id: 'report',
+        label: 'Hypothesis Report',
+        color: 'text-amber-300',
+        dot: 'bg-amber-400',
+        activeBg: 'bg-amber-950/40',
+        activeBorder: 'border-amber-500/70',
+        source: 'GPT-4o',
+        tagline: 'The full investigation compiled into something you can take to a lab meeting.',
+        description:
+          'After all targets are scored and ranked, GPT-4o reads the complete investigation log and assembles a structured report: executive summary, per-gene mechanism paragraphs, supporting evidence citations, novelty scores, and concrete next-step assays. The format mirrors a preclinical target identification report. If your top hit has 11 papers and no approved inhibitors, that shows up clearly alongside the ChEMBL gap and the DepMap essentiality score, so the case for pursuing it is already in writing.',
+      },
+    ],
+  },
+]
+
 const PHRASES = [
-  'drug hypothesis.',
+  'new drugs.',
   'novel targets.',
   'clinical insights.',
-  'therapeutic leads.',
-  'mechanistic evidence.',
-  'ranked gene candidates.',
-  'a publishable report.',
-  'dark gene discoveries.',
-  'PPI network analysis.',
-  'ChEMBL drug matches.',
-  'pathway enrichment.',
+  'new discoveries.',
+  'gene candidates.',
+  'a publication.',
+  'new discoveries.',
+  'PPI analysis.',
+  'drug matches.',
+  'path enrichment.',
   'novelty scores.',
-  'literature synthesis.',
-  'research directions.',
-  'a drug target.',
-  'actionable biology.',
-  'biomarker candidates.',
-  'oncogene networks.',
-  'a scientific narrative.',
-  'the next experiment.',
+  'ideas.',
+  'research direction.',
+  'intron sequencing.',
+  'biomarker studies.',
+  'vital oncogenes.',
+  'new experiments.',
 ]
 
 
@@ -81,6 +213,7 @@ export default function AnalyzePage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [selectedGene, setSelectedGene] = useState(null)
+  const [activeAgent, setActiveAgent] = useState(null)
 
   // Typing animation — cycles through PHRASES
   const [phraseIndex, setPhraseIndex] = useState(0)
@@ -137,7 +270,7 @@ export default function AnalyzePage() {
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <div className="pt-8 sm:pt-16 pb-4">
-        <h1 className="text-[2.6rem] leading-tight sm:text-6xl lg:text-8xl sm:leading-[1.06] font-bold text-white mb-5 sm:mb-8 tracking-tight">
+        <h1 className="text-[3rem] leading-tight sm:text-7xl lg:text-[8.5rem] sm:leading-[1.06] font-bold text-white mb-5 sm:mb-8 tracking-tight">
           From count matrix<br />
           <span className="text-amber-400">
             to{' '}
@@ -180,9 +313,9 @@ export default function AnalyzePage() {
 
       {/* ── Agent Network ────────────────────────────────────── */}
       <div className="border-t border-slate-800 pt-14">
-        <p className="text-2xl font-semibold text-white mb-2">Agent Network</p>
-        <p className="text-sm text-white/80 mb-8">
-          A supervisor orchestrates seven specialist agents in parallel. Click any node to inspect its role.
+        <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-tight">Agent Network</p>
+        <p className="text-base sm:text-lg text-white/70 mb-10 max-w-2xl leading-relaxed">
+          Nine specialist agents, one supervisor. Click any node to see what each agent does and what it says to the others.
         </p>
         <AgentWeb />
       </div>
@@ -275,6 +408,80 @@ export default function AnalyzePage() {
           </div>
 
         </div>
+      </div>
+
+      {/* ── About / Agent Guide ──────────────────────────────── */}
+      <div className="border-t border-slate-800 pt-14 space-y-14">
+        <div>
+          <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-tight">How it works</p>
+          <p className="text-base sm:text-lg text-white/70 max-w-2xl leading-relaxed">
+            Nine specialist agents, one supervisor. Click any card to see the scientific rationale and data sources behind each step.
+          </p>
+        </div>
+
+        {CLUSTERS.map(cluster => (
+          <div key={cluster.label}>
+            {/* Cluster header */}
+            <div className="flex items-center gap-3 mb-2">
+              <span className={`w-1 h-6 rounded-full shrink-0 ${cluster.divider}`} />
+              <p className={`text-xl font-bold ${cluster.color}`}>{cluster.label}</p>
+            </div>
+            <p className="text-base text-white/60 mb-6 pl-4">{cluster.description}</p>
+
+            {/* Card row with flex-grow physics */}
+            <div className="flex gap-5 items-stretch">
+              {cluster.agents.map(agent => {
+                const isActive = activeAgent === agent.id
+                return (
+                  <div
+                    key={agent.id}
+                    onClick={() => setActiveAgent(isActive ? null : agent.id)}
+                    style={{
+                      flex: isActive ? 2 : 1,
+                      transition: 'flex 0.38s cubic-bezier(0.34,1.56,0.64,1), transform 0.25s ease, box-shadow 0.25s ease',
+                    }}
+                    className={`cursor-pointer rounded-2xl border p-8 overflow-hidden min-w-0 min-h-[220px] flex flex-col
+                      ${isActive
+                        ? `${agent.activeBg} ${agent.activeBorder} -translate-y-1.5 shadow-2xl`
+                        : 'bg-slate-900/60 border-slate-800 hover:border-slate-600 hover:bg-slate-800/60'
+                      }`}
+                  >
+                    {/* Header row */}
+                    <div className="flex items-center gap-3 mb-5">
+                      <span className={`w-3 h-3 rounded-full shrink-0 ${agent.dot} ${isActive ? 'animate-pulse' : ''}`} />
+                      <span className={`text-lg font-semibold leading-tight ${isActive ? agent.color : 'text-white'}`}>
+                        {agent.label}
+                      </span>
+                      <span className="ml-auto text-sm text-white/30 shrink-0 pl-2">{agent.source}</span>
+                    </div>
+
+                    {/* Tagline */}
+                    <p className={`text-lg font-medium leading-snug transition-colors duration-200 ${isActive ? 'text-white' : 'text-white/65'}`}>
+                      {agent.tagline}
+                    </p>
+
+                    {/* Expanded description — always mounted; fades in after flex expansion finishes */}
+                    <div
+                      style={{
+                        overflow: 'hidden',
+                        maxHeight: isActive ? '600px' : '0px',
+                        opacity: isActive ? 1 : 0,
+                        transitionProperty: 'max-height, opacity',
+                        transitionDuration: isActive ? '0.4s, 0.25s' : '0.2s, 0.1s',
+                        transitionDelay: isActive ? '0.34s, 0.52s' : '0s, 0s',
+                        transitionTimingFunction: 'ease',
+                      }}
+                    >
+                      <p className="text-base text-white/80 leading-relaxed mt-5 pt-5 border-t border-white/10">
+                        {agent.description}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ── Developer Banner ─────────────────────────────────── */}

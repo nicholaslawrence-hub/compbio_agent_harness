@@ -11,7 +11,7 @@ export default function Layout() {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-50 bg-slate-950">
         <div className="h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-10 h-16 sm:h-20 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-10 h-16 sm:h-20 flex items-center justify-between">
 
           <Link to="/" className="flex items-center gap-3 group" onClick={() => setMenuOpen(false)}>
             <Dna size={26} className="text-amber-400" strokeWidth={1.5} />
@@ -150,12 +150,12 @@ export default function Layout() {
         <div className="h-px bg-slate-800/80" />
       </header>
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-10 py-6 sm:py-10">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-10 py-6 sm:py-10">
         <Outlet />
       </main>
 
       <footer className="border-t border-slate-700 bg-slate-950 mt-12">
-        <div className="max-w-7xl mx-auto w-full px-4 sm:px-10 pt-14 pb-10">
+        <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-10 pt-14 pb-10">
 
           {/* Top: logo + columns */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-10 pb-12 border-b border-slate-700">
