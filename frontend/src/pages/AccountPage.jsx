@@ -72,7 +72,7 @@ export default function AccountPage() {
           className="rounded-xl border border-amber-500/30 bg-amber-400/5 hover:bg-amber-400/10 p-6 transition-colors duration-150"
         >
           <p className="text-amber-400 font-semibold mb-1">New analysis</p>
-          <p className="text-sm text-slate-500">Upload a count matrix and run the full pipeline</p>
+          <p className="text-sm text-slate-500">Upload a count matrix and launch the agentic network</p>
         </Link>
         <Link
           to="/gene/EGFR"

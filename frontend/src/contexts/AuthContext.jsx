@@ -8,8 +8,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const getToken = () => localStorage.getItem('pharmagpt_token')
-  const setToken = (t) => t ? localStorage.setItem('pharmagpt_token', t) : localStorage.removeItem('pharmagpt_token')
+  const getToken = () => localStorage.getItem('rnagent_token')
+  const setToken = (t) => t ? localStorage.setItem('rnagent_token', t) : localStorage.removeItem('rnagent_token')
 
   const fetchMe = useCallback(async () => {
     const token = getToken()

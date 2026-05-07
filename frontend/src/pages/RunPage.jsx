@@ -35,7 +35,7 @@ export default function RunPage() {
     <div className="py-10 sm:py-16">
       <div className="mb-10">
         <p className="text-xs font-mono uppercase tracking-[0.2em] text-amber-400/60 mb-2">New Analysis</p>
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 tracking-tight">Run the pipeline</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 tracking-tight">Launch the agent network</h1>
         <p className="text-base text-slate-300 max-w-lg">
           Upload a count matrix and configure your experiment. Results are ready in minutes.
         </p>

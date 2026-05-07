@@ -79,11 +79,10 @@ const INTRA_SET = new Set([
   'drug,synthesis','synthesis,report','drug,report',
 ])
 
-const SPOKE_WORKERS = ['dge','pathway','ppi','depmap','opentargets','rag','drug','synthesis','report']
 
 function restLen(a, b) {
   const k = `${a},${b}`, kr = `${b},${a}`
-  if (SPOKE_SET.has(k) || SPOKE_SET.has(kr)) return 155
+  if (SPOKE_SET.has(k) || SPOKE_SET.has(kr)) return 210
   if (INTRA_SET.has(k) || INTRA_SET.has(kr)) return 95
   return 168
 }
@@ -95,7 +94,7 @@ const CHAT_INFO = {
     color: '#f59e0b', header: 'Supervisor Agent',
     desc: 'Central orchestrator. Routes tasks to specialist workers, aggregates results, and coordinates synthesis.',
     msgs: [
-      { from: 'SUP', text: 'Pipeline initialized. Dispatching DGE agent with count matrix and disease context.' },
+      { from: 'SUP', text: 'Agent network initialized. Dispatching DGE agent with count matrix and disease context.' },
       { from: 'SUP', text: 'DGE complete — routing to Pathway Enrichment and PPI Network.' },
       { from: 'SUP', text: 'Enrichment done. Dispatching Literature RAG with top genes and PPI partners.' },
       { from: 'SUP', text: 'All agents complete. Requesting Hypothesis Synthesis then Report Generation.' },
@@ -230,8 +229,7 @@ export default function AgentWeb() {
       groupRefs.current[n.id]?.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`)
     })
 
-    const sel   = selectedRef.current
-    const pulse = 0.5 + 0.5 * Math.sin((Date.now() / 650) * Math.PI * 2)
+    const sel = selectedRef.current
 
     EDGES.forEach(([a, b]) => {
       const el = lineRefs.current[`${a}-${b}`]
@@ -240,30 +238,22 @@ export default function AgentWeb() {
       el.setAttribute('x1', na.x.toFixed(1)); el.setAttribute('y1', na.y.toFixed(1))
       el.setAttribute('x2', nb.x.toFixed(1)); el.setAttribute('y2', nb.y.toFixed(1))
 
-      const isSpoke = SPOKE_SET.has(`${a},${b}`) || SPOKE_SET.has(`${b},${a}`)
-
-      if (sel === 'supervisor' && isSpoke) {
-        const workerId = a === 'supervisor' ? b : a
-        const grad = gradRefs.current[workerId]
+      if (sel && (a === sel || b === sel)) {
+        const grad = gradRefs.current[`${a}-${b}`]
         if (grad) {
-          const sup = map['supervisor'], wrk = map[workerId]
-          grad.setAttribute('x1', sup.x.toFixed(1)); grad.setAttribute('y1', sup.y.toFixed(1))
-          grad.setAttribute('x2', wrk.x.toFixed(1)); grad.setAttribute('y2', wrk.y.toFixed(1))
+          grad.setAttribute('x1', na.x.toFixed(1)); grad.setAttribute('y1', na.y.toFixed(1))
+          grad.setAttribute('x2', nb.x.toFixed(1)); grad.setAttribute('y2', nb.y.toFixed(1))
         }
-        el.setAttribute('stroke', `url(#aw-grad-sup-${workerId})`)
-        el.setAttribute('stroke-width', (1.2 + pulse * 2.0).toFixed(2))
-        el.setAttribute('stroke-opacity', (0.28 + pulse * 0.62).toFixed(2))
-      } else if (sel && (a === sel || b === sel)) {
-        el.setAttribute('stroke', nodeColor(sel))
-        el.setAttribute('stroke-width', (1.2 + pulse * 2.0).toFixed(2))
-        el.setAttribute('stroke-opacity', (0.28 + pulse * 0.62).toFixed(2))
+        el.setAttribute('stroke', `url(#aw-grad-${a}-${b})`)
+        el.setAttribute('stroke-width', '2')
+        el.setAttribute('stroke-opacity', '0.85')
       } else if (sel) {
         el.setAttribute('stroke', 'rgba(100,116,139,0.08)')
         el.setAttribute('stroke-width', '0.7')
         el.setAttribute('stroke-opacity', '1')
       } else {
-        el.setAttribute('stroke', 'rgba(100,116,139,0.26)')
-        el.setAttribute('stroke-width', '1.1')
+        el.setAttribute('stroke', 'rgba(148,163,184,0.45)')
+        el.setAttribute('stroke-width', '1.4')
         el.setAttribute('stroke-opacity', '1')
       }
     })
@@ -384,15 +374,17 @@ export default function AgentWeb() {
               <feGaussianBlur stdDeviation="7" result="b"/>
               <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
             </filter>
-            {SPOKE_WORKERS.map(wid => (
+            {EDGES.map(([a, b]) => (
               <linearGradient
-                key={`aw-grad-sup-${wid}`}
-                id={`aw-grad-sup-${wid}`}
+                key={`aw-grad-${a}-${b}`}
+                id={`aw-grad-${a}-${b}`}
                 gradientUnits="userSpaceOnUse"
-                ref={el => { if (el) gradRefs.current[wid] = el }}
+                ref={el => { if (el) gradRefs.current[`${a}-${b}`] = el }}
               >
-                <stop offset="0%" stopColor="#f59e0b" />
-                <stop offset="100%" stopColor={nodeColor(wid)} />
+                <stop offset="0%"   stopColor={nodeColor(a)} />
+                <stop offset="42%"  stopColor={nodeColor(a)} />
+                <stop offset="58%"  stopColor={nodeColor(b)} />
+                <stop offset="100%" stopColor={nodeColor(b)} />
               </linearGradient>
             ))}
           </defs>
@@ -402,8 +394,8 @@ export default function AgentWeb() {
             <line
               key={`${a}-${b}`}
               ref={el => { if (el) lineRefs.current[`${a}-${b}`] = el }}
-              stroke="rgba(100,116,139,0.26)"
-              strokeWidth="1.1"
+              stroke="rgba(148,163,184,0.45)"
+              strokeWidth="1.4"
             />
           ))}
 
@@ -423,8 +415,8 @@ export default function AgentWeb() {
                 <circle r={r}
                   fill="rgba(5,10,28,0.92)"
                   stroke={color}
-                  strokeWidth={isSel ? 2 : 1}
-                  strokeOpacity={isSel ? 1 : 0.28}
+                  strokeWidth={isSel ? 2.5 : 1.5}
+                  strokeOpacity={isSel ? 1 : 0.72}
                   filter={isSel ? 'url(#aw-glow)' : undefined}
                 />
 
@@ -433,13 +425,13 @@ export default function AgentWeb() {
                   <text textAnchor="middle" dominantBaseline="middle"
                     fontSize={isCenter ? '12' : '10.5'} fontWeight="700"
                     fontFamily={MONO}
-                    fill={isSel ? color : 'rgba(255,255,255,0.85)'}
+                    fill={isSel ? color : '#ffffff'}
                     style={{ pointerEvents: 'none', userSelect: 'none' }}
                   >{label[0]}</text>
                 ) : (
                   <text textAnchor="middle" fontSize="9" fontWeight="700"
                     fontFamily={MONO}
-                    fill={isSel ? color : 'rgba(255,255,255,0.82)'}
+                    fill={isSel ? color : '#ffffff'}
                     style={{ pointerEvents: 'none', userSelect: 'none' }}
                   >
                     <tspan x="0" dy="-5.5">{label[0]}</tspan>
@@ -453,8 +445,8 @@ export default function AgentWeb() {
       </div>
 
       {!selected && (
-        <p className="text-center text-xs text-slate-500 tracking-wide" style={{ fontFamily: MONO }}>
-          click any agent · drag to rearrange
+        <p className="text-center text-sm font-medium text-white">
+          Click Any Node
         </p>
       )}
 

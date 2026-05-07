@@ -58,7 +58,7 @@ const STEP_LOGS = {
   ppi_complete: [
     '> db/pinecone_rag.py: PubMed Entrez + Semantic Scholar fetch...',
     '> generating text-embedding-3-small vectors for each abstract...',
-    '> upserting to Pinecone index: pharmagpt-literature...',
+    '> upserting to Pinecone index: rnagent-literature...',
     '> semantic top-k search per gene, is_dark scoring by hit count...',
   ],
   rag_complete: [
@@ -189,7 +189,7 @@ export default function ResultsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `pharmagpt_report_${jobId.slice(0, 8)}.md`
+    a.download = `rnagent_report_${jobId.slice(0, 8)}.md`
     a.click()
   }
 
@@ -380,7 +380,7 @@ export default function ResultsPage() {
 
             {tab === 'Raw Data' && (
               <div className="card">
-                <h3 className="text-sm font-semibold text-white mb-4">Raw Pipeline Output</h3>
+                <h3 className="text-sm font-semibold text-white mb-4">Raw Agent Network Output</h3>
                 <pre className="text-xs text-gray-400 overflow-auto max-h-[600px] bg-gray-950 rounded-lg p-4">
                   {JSON.stringify(result, null, 2)}
                 </pre>

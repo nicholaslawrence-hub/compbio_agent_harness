@@ -52,7 +52,7 @@ const HYPOTHESIS_TEXTS = {
   VEGFA:
     'VEGFA is upregulated 3.1-fold and occupies the center of a dense angiogenesis network. ' +
     'Bevacizumab, ramucirumab, and multiple VEGFR TKIs are already approved, placing this gene ' +
-    'firmly in the low-novelty tier. Included as a pipeline calibration control: the scoring ' +
+    'firmly in the low-novelty tier. Included as an agent network calibration control: the scoring ' +
     'correctly deprioritizes well-drugged targets regardless of fold-change magnitude. ' +
     'If your analysis surfaces VEGFA at the top, check whether the disease context is ' +
     'angiogenesis-specific or if background gene counts are too small.',
@@ -114,7 +114,6 @@ export default function AnalyzePage() {
   const rightCardRef = useRef(null)
   const [leftIn,  setLeftIn]  = useState(false)
   const [rightIn, setRightIn] = useState(false)
-  const exampleVisible = leftIn   // drives AnimatedBar
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -147,10 +146,10 @@ export default function AnalyzePage() {
           </span>
         </h1>
         <p className="text-base sm:text-lg text-white max-w-xl leading-relaxed">
-          Upload an RNA-seq count matrix and a disease context. The pipeline runs
-          differential expression, maps protein interaction networks, mines the
-          literature, annotates known drugs, and synthesizes ranked hypotheses
-          end to end, without leaving the browser.
+          Upload an RNA-seq count matrix and a disease context. A coordinated
+          network of specialist agents runs differential expression, maps protein
+          interaction networks, mines the literature, annotates known drugs, and
+          synthesizes ranked hypotheses — end to end, without leaving the browser.
         </p>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-10 sm:mt-20">
           {user ? (
@@ -166,7 +165,7 @@ export default function AnalyzePage() {
                 onClick={() => navigate('/run')}
                 className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight shadow-[0_0_28px_rgba(251,191,36,0.30)] text-center"
               >
-                Try the Pipeline
+                Try the Agent Network
               </button>
               <Link
                 to="/login"
@@ -220,19 +219,19 @@ export default function AnalyzePage() {
                     }`} />
 
                     <div className="flex items-baseline justify-between mb-3">
-                      <span className={`text-xl font-bold tracking-tight transition-colors duration-200 ${
-                        isActive ? 'text-white' : 'text-slate-300'
+                      <span className={`text-2xl font-bold tracking-tight transition-colors duration-200 ${
+                        isActive ? 'text-white' : 'text-slate-200'
                       }`}>
                         {g.symbol}
                       </span>
-                      <div className="flex flex-wrap font-mono tabular-nums text-xs sm:text-sm text-slate-200 gap-x-3">
+                      <div className="flex flex-wrap font-mono tabular-nums text-sm sm:text-base text-white gap-x-3">
                         <span>log₂FC {g.lfc}</span>
                         <span>padj {g.padj}</span>
                       </div>
                     </div>
 
-                    <AnimatedBar score={g.novelty} visible={exampleVisible} />
-                    <p className="text-xs text-slate-300 mt-2">novelty score</p>
+                    <AnimatedBar score={g.novelty} visible={leftIn} />
+                    <p className="text-sm text-white mt-2">novelty score</p>
                   </div>
                 )
               })}
@@ -256,18 +255,18 @@ export default function AnalyzePage() {
               </div>
             ) : (
               <>
-                <p className="text-xl font-bold text-white mb-1">{selectedGene}</p>
-                <p className="text-xs text-slate-300 mb-5 font-mono">Generated hypothesis</p>
+                <p className="text-2xl font-bold text-white mb-1">{selectedGene}</p>
+                <p className="text-sm text-white/60 mb-5 font-mono">Generated hypothesis</p>
 
-                <div className="flex-1 overflow-y-auto pr-1" style={{ maxHeight: '200px' }}>
-                  <p key={selectedGene} className="text-base text-white leading-relaxed animate-fade-in">
+                <div className="flex-1 overflow-y-auto pr-1" style={{ maxHeight: '220px' }}>
+                  <p key={selectedGene} className="text-lg text-white leading-relaxed animate-fade-in">
                     {HYPOTHESIS_TEXTS[selectedGene]}
                   </p>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-sm text-slate-200 font-mono">Novelty score</span>
-                  <span className="font-mono text-lg font-bold text-amber-400">
+                <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between">
+                  <span className="text-base font-semibold text-white font-mono">Novelty score</span>
+                  <span className="font-mono text-2xl font-bold text-amber-400">
                     {EXAMPLE_GENES.find(g => g.symbol === selectedGene)?.novelty.toFixed(2)}
                   </span>
                 </div>

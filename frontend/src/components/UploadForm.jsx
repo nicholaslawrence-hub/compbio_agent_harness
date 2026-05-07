@@ -57,7 +57,7 @@ export default function UploadForm() {
   }
 
   const addSample    = () => setSamples([...samples, { name: '', condition: conditionA }])
-  const removeSample = (i) => setSamples(samples.filter((_, idx) => idx !== i))
+  const removeSample = (i) => { if (samples.length > 2) setSamples(samples.filter((_, idx) => idx !== i)) }
   const updateSample = (i, field, value) => {
     const next = [...samples]; next[i] = { ...next[i], [field]: value }; setSamples(next)
   }
@@ -239,10 +239,12 @@ export default function UploadForm() {
                   <option value={conditionB} style={{ background: '#0f172a' }}>{conditionB}</option>
                 </select>
 
-                <button type="button" onClick={() => removeSample(i)}
-                  className="text-slate-700 hover:text-red-400 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
-                  <Trash2 size={12} />
-                </button>
+                {samples.length > 2 && (
+                  <button type="button" onClick={() => removeSample(i)}
+                    className="text-slate-700 hover:text-red-400 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -263,7 +265,7 @@ export default function UploadForm() {
         className="w-full py-4 rounded-xl font-bold text-base text-slate-900 bg-amber-400 hover:bg-amber-300 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed tracking-tight"
         style={{ boxShadow: loading ? 'none' : '0 0 24px rgba(251,191,36,0.25)' }}
       >
-        {loading ? 'Starting pipeline…' : 'Run Analysis →'}
+        {loading ? 'Launching agent network…' : 'Run Analysis →'}
       </button>
     </form>
   )
