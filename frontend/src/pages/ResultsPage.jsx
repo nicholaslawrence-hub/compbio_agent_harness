@@ -10,54 +10,85 @@ import VolcanoPlot from '../components/VolcanoPlot.jsx'
 
 const TABS = ['Hypotheses', 'DGE Results', 'Report', 'Raw Data']
 
-
+const AGENT_STEP_META = {
+  supervisor:          { label: 'Director',        color: 'text-amber-300',   dot: 'bg-amber-400',   border: 'border-amber-900/50',   bg: 'bg-amber-950/30'   },
+  enrich_ppi:          { label: 'PPI Network',     color: 'text-indigo-300',  dot: 'bg-indigo-400',  border: 'border-indigo-900/50',  bg: 'bg-indigo-950/25'  },
+  literature_rag:      { label: 'Literature RAG',  color: 'text-cyan-300',    dot: 'bg-cyan-400',    border: 'border-cyan-900/50',    bg: 'bg-cyan-950/25'    },
+  drug_annotation:     { label: 'Drug Annotation', color: 'text-emerald-300', dot: 'bg-emerald-400', border: 'border-emerald-900/50', bg: 'bg-emerald-950/25' },
+  depmap_query:        { label: 'DepMap CRISPR',   color: 'text-rose-300',    dot: 'bg-rose-400',    border: 'border-rose-900/50',    bg: 'bg-rose-950/25'    },
+  opentargets_query:   { label: 'OpenTargets',     color: 'text-violet-300',  dot: 'bg-violet-400',  border: 'border-violet-900/50',  bg: 'bg-violet-950/25'  },
+}
 
 const STEP_LOGS = {
   queued: [
-    '> Job queued — waiting for worker...',
-    '> Validating input files...',
+    '> job queued, worker pool available...',
+    '> validating count matrix path and sample condition map...',
   ],
   running: [
-    '> Loading count matrix...',
-    '> Running PyDESeq2 negative binomial model...',
-    '> Applying Benjamini–Hochberg correction...',
-    '> Filtering DEGs (padj < 0.05, |log₂FC| > 1)...',
+    '> tools/dge.py: parse_count_matrix_from_upload()...',
+    '> PyDESeq2: median-of-ratios size factor estimation...',
+    '> fitting negative binomial GLM per gene, all samples...',
+    '> BH FDR correction across full detected-gene universe...',
+    '> filtering: padj < 0.05, |log2FC| > 1.0, condition_a / condition_b...',
   ],
   dge_complete: [
-    '> DEG analysis complete',
-    '> Querying GO Biological Process gene sets...',
-    '> Testing KEGG pathways (Fisher\'s exact test)...',
-    '> Ranking pathways by adjusted p-value...',
+    '> tools/pathway.py: building detected-gene background for ORA...',
+    '> Fisher exact test on KEGG, GO BP, Reactome gene sets (GSEApy)...',
+    '> Jaccard deduplication of redundant GO terms (threshold 0.5)...',
+    '> selecting top 5 non-redundant pathways by adjusted p-value...',
   ],
   pathway_complete: [
-    '> Querying STRING database...',
-    '> Fetching high-confidence PPI partners...',
-    '> Cross-referencing oncogene list...',
-    '> Scoring interaction networks...',
+    '> tools/ppi.py: STRING DB REST query (combined_score >= 700)...',
+    '> collecting up to 15 high-confidence interaction partners per gene...',
+    '> cross-referencing KNOWN_ONCOGENES set, tagging partners...',
+    '> db/mygene.py: batch GO MF + Reactome annotation via MyGene.info...',
+  ],
+  depmap_complete: [
+    '> db/depmap.py: GET /api/gene/summary_stats (Chronos_Combined)...',
+    '> parsing mean Chronos score and percent_dependent per gene...',
+    '> classifying: chronos < -0.5 = dependency, pct > 90 = common essential...',
+    '> flagging strongly_selective: cancer-type specific lethality...',
+  ],
+  ot_complete: [
+    '> db/opentargets.py: POST /api/v4/graphql...',
+    '> resolving HUGO symbols to Ensembl IDs via search()...',
+    '> querying associatedDiseases (enableIndirect=true, size=200)...',
+    '> decomposing scores: genetic_association, somatic_mutation, known_drug, rna_expression...',
   ],
   ppi_complete: [
-    '> Fetching PubMed abstracts for top genes...',
-    '> Querying Semantic Scholar API...',
-    '> Upserting vectors into Pinecone index...',
-    '> Running semantic search over index...',
+    '> db/pinecone_rag.py: PubMed Entrez + Semantic Scholar fetch...',
+    '> generating text-embedding-3-small vectors for each abstract...',
+    '> upserting to Pinecone index: pharmagpt-literature...',
+    '> semantic top-k search per gene, is_dark scoring by hit count...',
   ],
   rag_complete: [
-    '> Looking up proteins in UniProt...',
-    '> Fetching domain annotations...',
-    '> Searching ChEMBL for drug candidates...',
-    '> Computing drug novelty scores...',
+    '> db/uniprot.py: reviewed SwissProt entry per gene...',
+    '> db/chembl.py: target_synonym__icontains lookup...',
+    '> resolving pref_name + max_phase via batch molecule query...',
+    '> sorting by (-max_phase, -pchembl_value), 0 compounds = white space...',
   ],
   annotation_complete: [
-    '> Assembling gene context bundles...',
-    '> Running GPT-5.4-mini chain-of-thought synthesis...',
-    '> Scoring novelty (0–1 scale)...',
-    '> Ranking hypotheses by novelty score...',
+    '> agents/nodes.py: node_synthesize_hypotheses()...',
+    '> PubMed hit count per gene: "{gene}[Title/Abstract] AND cancer"...',
+    '> novelty score: 1.0 - log10(pub_count) / 4.0, clamped [0, 1]...',
+    '> GPT-5.4-mini chain-of-thought per gene via ThreadPoolExecutor...',
+  ],
+  supervisor_routing: [
+    '> agents/nodes.py: node_supervisor(), parsing investigation history...',
+    '> _format_supervisor_context(): formatting accumulated context entries...',
+    '> LLM selecting from enrich_ppi / literature_rag / drug_annotation / depmap_query / opentargets_query...',
+    '> JSON parse: next_step, subquery, reasoning, prune_genes...',
+  ],
+  supervisor_finalizing: [
+    '> supervisor: evidence coverage threshold met across priority genes...',
+    '> releasing iteration guard (max 8 loops)...',
+    '> routing to node_synthesize_hypotheses()...',
   ],
   synthesis_complete: [
-    '> Building publication-style report...',
-    '> Generating executive summary...',
-    '> Formatting citations and evidence...',
-    '> Finalizing markdown output...',
+    '> agents/nodes.py: node_generate_report()...',
+    '> aggregating hypotheses list, pathway hits, pruned_genes log...',
+    '> GPT-5.4-mini: publication-style markdown with ranked targets...',
+    '> writing to AgentState.final_report, status = complete...',
   ],
 }
 
@@ -72,12 +103,27 @@ export default function ResultsPage() {
   const [job, setJob] = useState(null)
   const [tab, setTab] = useState('Hypotheses')
   const [error, setError] = useState('')
+  const [supervisorLog, setSupervisorLog] = useState([])
+  const [newLogIdx, setNewLogIdx] = useState(-1)
+  const agentLogRef = useRef(null)
 
   useEffect(() => {
     getJobStatus(jobId).then(setJob).catch(e => setError(e.message))
     const stop = streamJobProgress(
       jobId,
-      (data) => setJob(prev => ({ ...prev, ...data })),
+      (data) => {
+        setJob(prev => ({ ...prev, ...data }))
+        if (data.supervisor_context?.length) {
+          setSupervisorLog(prev => {
+            const incoming = data.supervisor_context
+            if (incoming.length > prev.length) {
+              setNewLogIdx(incoming.length - 1)
+              setTimeout(() => setNewLogIdx(-1), 1800)
+            }
+            return incoming
+          })
+        }
+      },
       (data) => {
         setJob(prev => ({ ...prev, ...data }))
         getJobStatus(jobId).then(setJob).catch(() => {})
@@ -85,6 +131,13 @@ export default function ResultsPage() {
     )
     return stop
   }, [jobId])
+
+  // Auto-scroll agent log to bottom when new entries arrive
+  useEffect(() => {
+    if (agentLogRef.current) {
+      agentLogRef.current.scrollTop = agentLogRef.current.scrollHeight
+    }
+  }, [supervisorLog.length])
 
   const isRunning = job && !['complete', 'failed', 'dge_failed'].includes(job.status)
   const result = job?.result ?? {}
@@ -200,6 +253,46 @@ export default function ResultsPage() {
               ))}
             </div>
           )}
+
+          {/* Agent Reasoning Feed */}
+          {supervisorLog.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Agent Reasoning</span>
+                <div className="flex-1 h-px bg-slate-800" />
+                <span className="text-[10px] text-slate-600 tabular-nums">{supervisorLog.length} step{supervisorLog.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div
+                ref={agentLogRef}
+                className="space-y-1.5 max-h-56 overflow-y-auto pr-1"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(100,116,139,0.3) transparent' }}
+              >
+                {supervisorLog.map((entry, i) => {
+                  const meta = AGENT_STEP_META[entry.step] ?? AGENT_STEP_META.supervisor
+                  const isNewest = i === supervisorLog.length - 1
+                  const isNew    = i === newLogIdx
+                  return (
+                    <div
+                      key={i}
+                      className={`rounded-lg px-3 py-2 border text-xs ${meta.bg} ${meta.border} ${isNew ? 'animate-fade-in-up' : ''}`}
+                    >
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot} ${isNewest ? 'animate-pulse' : ''}`} />
+                        <span className={`font-semibold text-[10px] uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
+                        {entry.subquery && entry.subquery !== 'all top genes' && (
+                          <span className="text-slate-500 text-[10px] font-mono truncate max-w-[140px]">→ {entry.subquery}</span>
+                        )}
+                        <span className="ml-auto text-slate-700 text-[10px] tabular-nums">#{i + 1}</span>
+                      </div>
+                      <p className={`leading-relaxed pl-3.5 ${isNewest ? 'text-slate-300' : 'text-slate-500'}`}>
+                        {entry.summary}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -240,7 +333,7 @@ export default function ResultsPage() {
             {tab === 'Hypotheses' && (
               <div className="space-y-4">
                 <p className="text-sm text-gray-400">
-                  Ranked by novelty score — higher means fewer existing drugs and more dark-gene characteristics.
+                  Ranked by novelty score. Higher = fewer PubMed hits, lower OpenTargets evidence, no ChEMBL drugs. Computed as 1 - log10(pub_count) / 4.
                 </p>
                 {hypotheses.length === 0
                   ? <p className="text-slate-500 text-sm text-center py-12">No hypotheses generated yet.</p>

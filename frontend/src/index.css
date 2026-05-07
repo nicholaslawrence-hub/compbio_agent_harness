@@ -55,6 +55,42 @@
   50%       { box-shadow: 0 0 14px 5px rgba(168,85,247,0.7), 0 0 0 5px rgba(168,85,247,0.15); }
 }
 
+/* Marching ants border for drag-over */
+@keyframes marchingAnts {
+  to { background-position: 100% 0, 0 100%, 0 0, 100% 100%; }
+}
+.marching-ants {
+  background:
+    repeating-linear-gradient(90deg, rgba(251,191,36,0.7) 0, rgba(251,191,36,0.7) 6px, transparent 6px, transparent 12px),
+    repeating-linear-gradient(90deg, rgba(251,191,36,0.7) 0, rgba(251,191,36,0.7) 6px, transparent 6px, transparent 12px),
+    repeating-linear-gradient(0deg,  rgba(251,191,36,0.7) 0, rgba(251,191,36,0.7) 6px, transparent 6px, transparent 12px),
+    repeating-linear-gradient(0deg,  rgba(251,191,36,0.7) 0, rgba(251,191,36,0.7) 6px, transparent 6px, transparent 12px);
+  background-size: 12px 1px, 12px 1px, 1px 12px, 1px 12px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  animation: marchingAnts 0.5s linear infinite;
+}
+
+.glass-panel {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.glass-input {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: white;
+  transition: border-color 0.15s;
+}
+.glass-input:focus {
+  outline: none;
+  border-color: rgba(251,191,36,0.5);
+  box-shadow: 0 0 0 2px rgba(251,191,36,0.08);
+}
+.glass-input::placeholder { color: rgba(148,163,184,0.5); }
+
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }

@@ -1,7 +1,8 @@
-import { useState, useRef, useLayoutEffect, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Github, Linkedin, Code2, ExternalLink } from 'lucide-react'
+import { Github, Linkedin, Code2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import AgentWeb from '../components/AgentWeb.jsx'
 
 const PHRASES = [
   'drug hypothesis.',
@@ -24,51 +25,6 @@ const PHRASES = [
   'oncogene networks.',
   'a scientific narrative.',
   'the next experiment.',
-]
-
-const STEPS = [
-  {
-    n: 1,
-    label: 'Differential Expression',
-    detail:
-      'Your count matrix is tested gene-by-gene for statistically significant expression changes between case and control. PyDESeq2 applies a negative binomial model with Benjamini–Hochberg correction. Only genes clearing padj < 0.05 and |log₂FC| > 1 feed into downstream steps, everything else is filtered out.',
-  },
-  {
-    n: 2,
-    label: 'Pathway Enrichment',
-    detail:
-      'The DEG list is tested against GO Biological Process and KEGG gene sets using a Fisher\'s exact over-representation test — statistically valid on small N where correlation-based methods like WGCNA break down. Significant pathways (padj < 0.05) are ranked and deduplicated by Jaccard overlap. The top 5 — for example "MAPK signaling", "PI3K-AKT pathway", or "cell cycle regulation", are passed directly into the LLM prompt alongside each gene, providing structured biological context before any hypothesis is written.',
-  },
-  {
-    n: 3,
-    label: 'Protein Interaction Network',
-    detail:
-      'Top upregulated genes are queried against the STRING database (confidence ≥ 700) to map interaction networks. A single batch call to MyGene.info then annotates every focal gene and its top partners with GO Molecular Function terms — so the LLM sees "KRAS (GTPase activity)" rather than just a symbol. Partners are cross-referenced against a curated oncogene list to identify which connections are therapeutically exploitable.',
-  },
-  {
-    n: 4,
-    label: 'Literature RAG',
-    detail:
-      'Abstracts are fetched live from PubMed and Semantic Scholar, then upserted into a Pinecone vector index. The index is semantically searched to pull the most relevant passages per gene. When a gene returns fewer than three direct hits, the agent automatically retries with a "{gene} AND {top interactor}" query — allowing it to surface indirect evidence through network neighbours. Genes still returning sparse results are flagged as dark genes.',
-  },
-  {
-    n: 5,
-    label: 'Drug & Protein Annotation',
-    detail:
-      'Each gene is looked up in UniProt for functional description and known 3D structures. ChEMBL is then searched for approved and investigational drugs against the same target. Existing drug coverage directly shapes the novelty score in the next step, a well-drugged target scores lower, a dark gene with no compounds scores higher.',
-  },
-  {
-    n: 6,
-    label: 'Hypothesis Synthesis',
-    detail:
-      'GPT-5.4-mini receives the combined DGE statistics, GO Molecular Function terms, confirmed Reactome pathway memberships, annotated PPI network, literature passages, and drug landscape for each gene. Chain-of-thought reasoning produces a structured hypothesis naming at least two specific interaction partners and a concrete molecular event — phosphorylation site, complex dissociation, or transcriptional target. Dark genes with no existing drugs surface at the top.',
-  },
-  {
-    n: 7,
-    label: 'Report Generation',
-    detail:
-      'A publication-style report covers all findings: executive summary, targets ranked by novelty score, proposed mechanisms, and recommended follow-up experiments including suggested assays and validation approaches. Displayed inline and fully copyable for grant writing or lab notebooks.',
-  },
 ]
 
 
@@ -96,7 +52,7 @@ const HYPOTHESIS_TEXTS = {
   VEGFA:
     'VEGFA is upregulated 3.1-fold and occupies the center of a dense angiogenesis network. ' +
     'Bevacizumab, ramucirumab, and multiple VEGFR TKIs are already approved, placing this gene ' +
-    'firmly in the low-novelty tier. Included as a pipeline calibration control — the scoring ' +
+    'firmly in the low-novelty tier. Included as a pipeline calibration control: the scoring ' +
     'correctly deprioritizes well-drugged targets regardless of fold-change magnitude. ' +
     'If your analysis surfaces VEGFA at the top, check whether the disease context is ' +
     'angiogenesis-specific or if background gene counts are too small.',
@@ -124,31 +80,7 @@ function AnimatedBar({ score, visible }) {
 export default function AnalyzePage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [activeStep, setActiveStep] = useState(null)
   const [selectedGene, setSelectedGene] = useState(null)
-  const containerRef = useRef(null)
-  const labelRefs    = useRef([])
-  const bubbleRef    = useRef(null)
-  const [line, setLine] = useState(null)
-
-  useLayoutEffect(() => {
-    if (!activeStep) { setLine(null); return }
-    const raf = requestAnimationFrame(() => {
-      const cRect = containerRef.current?.getBoundingClientRect()
-      const lbl   = labelRefs.current[activeStep - 1]?.getBoundingClientRect()
-      const bub   = bubbleRef.current?.getBoundingClientRect()
-      if (!cRect || !lbl || !bub) return
-      setLine({
-        x1: lbl.right - cRect.left,
-        y1: lbl.top   + lbl.height / 2 - cRect.top,
-        x2: bub.left  - cRect.left,
-        y2: bub.top   + bub.height / 2 - cRect.top,
-      })
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [activeStep])
-
-  const toggle = (n) => setActiveStep(prev => (prev === n ? null : n))
 
   // Typing animation — cycles through PHRASES
   const [phraseIndex, setPhraseIndex] = useState(0)
@@ -214,7 +146,7 @@ export default function AnalyzePage() {
             <span className="inline-block w-[3px] cursor-blink">_</span>
           </span>
         </h1>
-        <p className="text-base sm:text-lg text-slate-200 max-w-xl leading-relaxed">
+        <p className="text-base sm:text-lg text-white max-w-xl leading-relaxed">
           Upload an RNA-seq count matrix and a disease context. The pipeline runs
           differential expression, maps protein interaction networks, mines the
           literature, annotates known drugs, and synthesizes ranked hypotheses
@@ -247,6 +179,15 @@ export default function AnalyzePage() {
         </div>
       </div>
 
+      {/* ── Agent Network ────────────────────────────────────── */}
+      <div className="border-t border-slate-800 pt-14">
+        <p className="text-2xl font-semibold text-white mb-2">Agent Network</p>
+        <p className="text-sm text-slate-300 mb-8">
+          A supervisor orchestrates seven specialist agents in parallel. Click any node to inspect its role.
+        </p>
+        <AgentWeb />
+      </div>
+
       {/* ── Example use-case ─────────────────────────────────── */}
       <div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -274,26 +215,24 @@ export default function AnalyzePage() {
                           : 'hover:bg-slate-700/30 hover:opacity-90'
                     }`}
                   >
-                    {/* 3px active left bar */}
                     <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full transition-all duration-200 ${
                       isActive ? 'bg-amber-400' : 'bg-transparent'
                     }`} />
 
-                    {/* Gene name + tabular stats */}
                     <div className="flex items-baseline justify-between mb-3">
                       <span className={`text-xl font-bold tracking-tight transition-colors duration-200 ${
                         isActive ? 'text-white' : 'text-slate-300'
                       }`}>
                         {g.symbol}
                       </span>
-                      <div className="flex flex-wrap font-mono tabular-nums text-xs sm:text-sm text-slate-400 gap-x-3">
+                      <div className="flex flex-wrap font-mono tabular-nums text-xs sm:text-sm text-slate-200 gap-x-3">
                         <span>log₂FC {g.lfc}</span>
                         <span>padj {g.padj}</span>
                       </div>
                     </div>
 
                     <AnimatedBar score={g.novelty} visible={exampleVisible} />
-                    <p className="text-xs text-slate-400 mt-2">novelty score</p>
+                    <p className="text-xs text-slate-300 mt-2">novelty score</p>
                   </div>
                 )
               })}
@@ -307,127 +246,33 @@ export default function AnalyzePage() {
               rightIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
             }`}
           >
-
             {selectedGene === null ? (
-              /* Empty state */
               <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="text-3xl">←</div>
-                <p className="text-base font-semibold text-slate-300">Click left on a gene</p>
-                <p className="text-sm text-slate-500 max-w-[200px] leading-relaxed">
+                <p className="text-base font-semibold text-white">Click a gene</p>
+                <p className="text-sm text-slate-300 max-w-[200px] leading-relaxed">
                   Select any target on the left to see the generated mechanism and evidence.
                 </p>
               </div>
             ) : (
               <>
-                {/* Gene name header in detail panel */}
                 <p className="text-xl font-bold text-white mb-1">{selectedGene}</p>
-                <p className="text-xs text-slate-500 mb-5 font-mono">Generated hypothesis</p>
+                <p className="text-xs text-slate-300 mb-5 font-mono">Generated hypothesis</p>
 
-                {/* Scrollable hypothesis text */}
                 <div className="flex-1 overflow-y-auto pr-1" style={{ maxHeight: '200px' }}>
-                  <p
-                    key={selectedGene}
-                    className="text-base text-slate-200 leading-relaxed animate-fade-in"
-                  >
+                  <p key={selectedGene} className="text-base text-white leading-relaxed animate-fade-in">
                     {HYPOTHESIS_TEXTS[selectedGene]}
                   </p>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-sm text-slate-400 font-mono">Novelty score</span>
+                  <span className="text-sm text-slate-200 font-mono">Novelty score</span>
                   <span className="font-mono text-lg font-bold text-amber-400">
                     {EXAMPLE_GENES.find(g => g.symbol === selectedGene)?.novelty.toFixed(2)}
                   </span>
                 </div>
               </>
             )}
-          </div>
-
-        </div>
-      </div>
-
-      {/* ── Data Pipeline ────────────────────────────────────── */}
-      <div className="border-t border-slate-800 pt-14">
-        <p className="text-2xl font-semibold text-slate-400 mb-10">Data Pipeline</p>
-
-        <div ref={containerRef} className="relative flex flex-col sm:flex-row sm:gap-40 gap-8 items-stretch">
-
-          {line && (
-            <svg
-              className="absolute inset-0 pointer-events-none hidden sm:block"
-              style={{ width: '100%', height: '100%', overflow: 'visible' }}
-            >
-              <path
-                d={`M ${line.x1} ${line.y1} C ${line.x1 + 48} ${line.y1}, ${line.x2 - 48} ${line.y2}, ${line.x2} ${line.y2}`}
-                stroke="rgba(251,191,36,0.20)"
-                strokeWidth="1"
-                fill="none"
-              />
-              <circle cx={line.x2} cy={line.y2} r="2.5" fill="rgba(251,191,36,0.40)" />
-            </svg>
-          )}
-
-          <div className="shrink-0 sm:w-80 w-full flex flex-col z-10">
-            {STEPS.map((step, i) => {
-              const isActive = activeStep === step.n
-              const isLast   = i === STEPS.length - 1
-              return (
-                <div key={step.n} className="flex gap-4 items-start">
-                  <div className="flex flex-col items-center">
-                    <button
-                      type="button"
-                      onClick={() => toggle(step.n)}
-                      style={isActive ? {
-                        boxShadow: '0 0 0 4px rgba(251,191,36,0.15), 0 0 22px rgba(251,191,36,0.28)',
-                      } : {}}
-                      className={`rounded-full font-mono font-bold flex items-center justify-center shrink-0 transition-all duration-300 ${
-                        isActive
-                          ? 'w-12 h-12 text-xl bg-amber-400 text-slate-900'
-                          : 'w-10 h-10 text-base border border-amber-500/30 text-amber-400/55 hover:text-amber-400 hover:border-amber-400/60'
-                      }`}
-                    >
-                      {step.n}
-                    </button>
-                    {!isLast && (
-                      <div className="w-px flex-1 min-h-[1.25rem] border-l border-dashed border-slate-800 my-1.5" />
-                    )}
-                  </div>
-
-                  <button
-                    ref={el => { labelRefs.current[i] = el }}
-                    type="button"
-                    onClick={() => toggle(step.n)}
-                    className={`inline-block text-left leading-snug transition-all duration-300 ${
-                      isActive
-                        ? 'text-xl sm:text-2xl font-semibold text-slate-100 pt-2'
-                        : 'text-base sm:text-lg font-medium text-slate-500 hover:text-slate-300 pt-2'
-                    }`}
-                  >
-                    {step.label}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="flex-1 flex items-start sm:items-center z-10">
-            <div
-              ref={bubbleRef}
-              className={`w-full rounded-xl p-5 sm:p-8 transition-all duration-300 ${
-                activeStep ? 'border border-slate-800 bg-slate-900' : 'border border-transparent bg-transparent sm:min-h-[260px]'
-              }`}
-            >
-              {activeStep && (
-                <div>
-                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/50 mb-4">
-                    Step {activeStep}
-                  </p>
-                  <p className="text-base text-slate-300 leading-loose">
-                    {STEPS[activeStep - 1].detail}
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
 
         </div>
@@ -441,7 +286,7 @@ export default function AnalyzePage() {
           </div>
           <div>
             <p className="text-lg font-semibold text-white mb-1.5">Source Code</p>
-            <p className="text-sm text-slate-300 max-w-lg leading-relaxed">
+            <p className="text-sm text-white max-w-lg leading-relaxed">
               The entire codebase is open source on GitHub. Check out the repo for implementation details, or to contribute your own features and improvements.
             </p>
           </div>

@@ -14,10 +14,9 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-10 h-16 sm:h-20 flex items-center justify-between">
 
           <Link to="/" className="flex items-center gap-3 group" onClick={() => setMenuOpen(false)}>
-            <Dna size={20} className="text-amber-400" strokeWidth={1.5} />
-            <span className="font-semibold text-base sm:text-lg text-slate-100 tracking-tight group-hover:text-white transition-colors duration-150">
-              Pharma<span className="text-amber-400">GPT</span>
-              <span className="text-slate-600 font-light ml-1.5 text-sm sm:text-base">/agent</span>
+            <Dna size={26} className="text-amber-400" strokeWidth={1.5} />
+            <span className="font-bold text-lg sm:text-xl text-white tracking-tight group-hover:text-amber-400 transition-colors duration-150">
+              RN<span className="text-amber-400 group-hover:text-white transition-colors duration-150">Agent</span>
             </span>
           </Link>
 
@@ -27,7 +26,7 @@ export default function Layout() {
               to="/gene/EGFR"
               className={({ isActive }) =>
                 `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
-                  isActive ? 'text-slate-100' : 'text-slate-500 hover:text-slate-300'
+                  isActive ? 'text-slate-100' : 'text-slate-200 hover:text-white'
                 }`
               }
             >
@@ -59,7 +58,7 @@ export default function Layout() {
               user ? (
                 <Link
                   to="/account"
-                  className="flex items-center gap-2 pl-3 ml-1 border-l border-slate-800 text-sm text-slate-400 hover:text-slate-200 transition-colors duration-150"
+                  className="flex items-center gap-2 pl-3 ml-1 border-l border-slate-800 text-sm text-slate-200 hover:text-white transition-colors duration-150"
                 >
                   <UserCircle2 size={18} strokeWidth={1.5} />
                   <span className="font-medium">{user.name.split(' ')[0]}</span>
@@ -67,7 +66,7 @@ export default function Layout() {
               ) : (
                 <Link
                   to="/login"
-                  className="ml-1 pl-3 border-l border-slate-800 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors duration-150"
+                  className="ml-1 pl-3 border-l border-slate-800 text-sm font-medium text-slate-200 hover:text-white transition-colors duration-150"
                 >
                   Log in
                 </Link>
@@ -91,7 +90,7 @@ export default function Layout() {
             </NavLink>
             <button
               onClick={() => setMenuOpen(o => !o)}
-              className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+              className="text-slate-200 hover:text-white transition-colors p-1"
               aria-label="Toggle menu"
             >
               {menuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -107,7 +106,7 @@ export default function Layout() {
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'text-slate-100 bg-slate-800' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  isActive ? 'text-slate-100 bg-slate-800' : 'text-slate-200 hover:text-white hover:bg-slate-800/50'
                 }`
               }
             >
@@ -119,7 +118,7 @@ export default function Layout() {
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-semibold transition-colors ${
-                  isActive ? 'text-slate-100 bg-slate-800' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  isActive ? 'text-slate-100 bg-slate-800' : 'text-slate-200 hover:text-white hover:bg-slate-800/50'
                 }`
               }
             >
@@ -130,7 +129,7 @@ export default function Layout() {
                 <Link
                   to="/account"
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2 px-3 py-3 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
+                  className="flex items-center gap-2 px-3 py-3 rounded-lg text-sm text-slate-200 hover:text-white hover:bg-slate-800/50 transition-colors"
                 >
                   <UserCircle2 size={16} strokeWidth={1.5} />
                   {user.name.split(' ')[0]}
@@ -139,7 +138,7 @@ export default function Layout() {
                 <Link
                   to="/login"
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
+                  className="flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-medium text-slate-200 hover:text-white hover:bg-slate-800/50 transition-colors"
                 >
                   Log in
                 </Link>
@@ -155,37 +154,77 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      <footer className="max-w-7xl mx-auto w-full px-4 sm:px-10 py-5 sm:py-6 flex flex-col sm:flex-row items-center gap-3 sm:gap-0 sm:justify-between border-t border-slate-800/60">
-        <span className="text-xs text-slate-600">
-          Built by{' '}
-          <a
-            href="https://www.linkedin.com/in/nicholaslawrence"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-slate-400 hover:text-slate-200 transition-colors duration-150"
-          >
-            Nicholas Lawrence
-          </a>
-        </span>
-        <div className="flex items-center gap-4">
-          <a
-            href="https://www.linkedin.com/in/nicholaslawrence"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-300 transition-colors duration-150"
-          >
-            <Linkedin size={12} strokeWidth={1.5} />
-            LinkedIn
-          </a>
-          <a
-            href="https://github.com/nicholaslawrence-hub/compbio_agent_harness"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-300 transition-colors duration-150"
-          >
-            <Github size={12} strokeWidth={1.5} />
-            nicholaslawrence-hub
-          </a>
+      <footer className="border-t border-slate-700 bg-slate-950 mt-12">
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-10 pt-14 pb-10">
+
+          {/* Top: logo + columns */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-10 pb-12 border-b border-slate-700">
+
+            {/* Brand */}
+            <div className="col-span-2 sm:col-span-1">
+              <Link to="/" className="flex items-center gap-2.5 mb-4">
+                <Dna size={22} className="text-amber-400" strokeWidth={1.5} />
+                <span className="font-bold text-xl text-white tracking-tight">
+                  RN<span className="text-amber-400">Agent</span>
+                </span>
+              </Link>
+              <p className="text-sm text-slate-300 leading-relaxed max-w-[200px]">
+                Automated drug-target discovery from RNA-seq data.
+              </p>
+            </div>
+
+            {/* Tool */}
+            <div>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-5">Tool</p>
+              <ul className="space-y-3.5">
+                <li><Link to="/"          className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Home</Link></li>
+                <li><Link to="/run"       className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Run Analysis</Link></li>
+                <li><Link to="/gene/EGFR" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Gene Lookup</Link></li>
+              </ul>
+            </div>
+
+            {/* Account */}
+            <div>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-5">Account</p>
+              <ul className="space-y-3.5">
+                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Log in</Link></li>
+                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sign up</Link></li>
+                <li><Link to="/account" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">My Jobs</Link></li>
+              </ul>
+            </div>
+
+            {/* Project */}
+            <div>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-5">Project</p>
+              <ul className="space-y-3.5">
+                <li>
+                  <a href="https://github.com/nicholaslawrence-hub/compbio_agent_harness" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">
+                    <Github size={15} strokeWidth={1.5} /> GitHub
+                  </a>
+                </li>
+                <li>
+                  <a href="https://www.linkedin.com/in/nicholas-lawrence-a16122296/" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">
+                    <Linkedin size={15} strokeWidth={1.5} /> LinkedIn
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div className="pt-7 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-sm text-slate-400">
+              Built by{' '}
+              <a href="https://www.linkedin.com/in/nicholas-lawrence-a16122296/" target="_blank" rel="noopener noreferrer"
+                className="text-white font-medium hover:text-amber-400 transition-colors duration-150">
+                Nicholas Lawrence
+              </a>
+            </p>
+            <p className="text-sm text-slate-400 font-mono">RNAgent</p>
+          </div>
+
         </div>
       </footer>
     </div>

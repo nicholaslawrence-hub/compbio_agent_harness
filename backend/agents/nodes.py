@@ -24,6 +24,8 @@ from db.pinecone_rag import query_literature
 from db.uniprot import search_protein
 from db.chembl import get_drug_interactions
 from db.mygene import get_gene_annotations
+from db.depmap import get_gene_essentiality
+from db.opentargets import get_ot_association
 
 
 def _llm() -> ChatOpenAI:
@@ -68,6 +70,40 @@ def node_run_dge(state: AgentState) -> dict:
         return {"errors": [f"DGE error: {str(e)}"], "status": "dge_failed", "progress": 5}
 
 
+# ── Node 1b: DGE retry with lenient threshold ────────────────────────────────
+
+def node_dge_retry(state: AgentState) -> dict:
+    """
+    Re-run top-gene selection with lenient thresholds (padj < 0.10, |log2FC| > 0.5).
+    Called by supervisor when fewer than 10 genes passed strict DGE on first attempt.
+    Uses the already-computed all_dge_results — no re-running PyDESeq2.
+    """
+    all_dge = state.get("all_dge_results", [])
+    if not all_dge:
+        return {"status": "dge_failed", "errors": ["No DGE results to retry from"], "progress": 5}
+
+    df = pd.DataFrame(all_dge)
+    lenient = df[
+        (df["padj"] < 0.10) &
+        (df["log2FoldChange"].abs() > 0.5) &
+        (df["log2FoldChange"] > 0)
+    ].sort_values("log2FoldChange", ascending=False)
+
+    if lenient.empty:
+        return {"status": "dge_failed", "errors": ["No genes passed lenient DGE thresholds"], "progress": 5}
+
+    top_df   = lenient.head(settings.max_genes_for_rag)
+    top_genes = top_df["gene"].tolist()
+
+    return {
+        "dge_results":  top_df.to_dict("records"),
+        "top_genes":    top_genes,
+        "dge_attempt":  2,
+        "status":       "dge_complete",
+        "progress":     20,
+    }
+
+
 # ── Node 2: Pathway enrichment ──────────────────────────────────────────────
 
 def node_pathway_enrichment(state: AgentState) -> dict:
@@ -110,13 +146,24 @@ def node_pathway_enrichment(state: AgentState) -> dict:
 
 def node_enrich_ppi(state: AgentState) -> dict:
     """
-    Fetch STRING PPI networks for top genes, then batch-annotate focal genes
-    and their top partners via MyGene.info (GO Molecular Function + Reactome).
+    Fetch STRING PPI networks for top genes (or a supervisor-specified target gene),
+    then batch-annotate via MyGene.info (GO Molecular Function + Reactome).
 
-    This gives the LLM concrete enzymatic descriptions — e.g. "KRAS (GTPase activity)"
-    instead of just a gene name — so the mechanism field can be truly molecular.
+    When the supervisor provides a subquery (e.g. a PPI partner gene name), this node
+    fetches PPI specifically for that gene and merges it into the existing ppi_results —
+    enabling targeted follow-up on interactors discovered in previous iterations.
     """
-    genes = state.get("top_genes", [])[:10]
+    subquery = (state.get("supervisor_subquery") or "").strip()
+
+    # If supervisor specified a particular gene (e.g. a partner worth investigating),
+    # query just that one and merge into existing results. Otherwise default to top genes.
+    existing_ppi = {r["gene"]: r for r in state.get("ppi_results", []) if r}
+    if subquery and subquery not in existing_ppi:
+        genes = [subquery]
+        is_followup = True
+    else:
+        genes = state.get("top_genes", [])[:10]
+        is_followup = False
 
     def _fetch_ppi(gene: str) -> dict:
         try:
@@ -156,84 +203,546 @@ def node_enrich_ppi(state: AgentState) -> dict:
             # Keep only top 2 MF terms per partner to stay prompt-efficient
             p["mf_terms"] = ann.get("mf_terms", [])[:2]
 
-    return {"ppi_results": ppi_results, "status": "ppi_complete", "progress": 40}
+    # Merge follow-up results into existing ppi_results
+    if is_followup:
+        merged = list(existing_ppi.values())
+        for r in ppi_results:
+            if r and r["gene"] not in existing_ppi:
+                merged.append(r)
+        ppi_results = merged
+
+    # Build a supervisor-readable summary
+    summaries = []
+    for r in ppi_results:
+        if not r:
+            continue
+        partners = [p.get("partner", "") for p in r.get("partners", [])[:5]]
+        oncogenes = [p.get("partner") for p in r.get("partners", []) if p.get("is_oncogene")]
+        mf = r.get("go_annotation", {}).get("mf_terms", [])
+        summaries.append(
+            f"{r['gene']}: partners=[{', '.join(partners)}]"
+            + (f" oncogene_partners=[{', '.join(oncogenes)}]" if oncogenes else "")
+            + (f" GO_MF=[{mf[0]}]" if mf else "")
+        )
+
+    ctx_entry = {
+        "step": "enrich_ppi",
+        "subquery": subquery or "all top genes",
+        "summary": "; ".join(summaries) if summaries else "No PPI data retrieved",
+        "is_followup": is_followup,
+    }
+
+    return {
+        "ppi_results": ppi_results,
+        "supervisor_context": [ctx_entry],
+        "status": "ppi_complete",
+        "progress": 40,
+    }
 
 
 # ── Node 4: Literature RAG ───────────────────────────────────────────────────
 
 def node_literature_rag(state: AgentState) -> dict:
     """
-    Self-RAG via Pinecone: parallel PubMed + Pinecone queries per gene.
-    Falls back to direct PubMed fetch when PINECONE_API_KEY is not configured.
-
-    Passes the gene's top PPI partners so that, when primary '{gene} AND {disease}'
-    search returns <3 hits, the RAG layer can retry with '{gene} AND {interactor}' —
-    allowing the agent to surface indirect evidence through known network neighbours.
+    Self-RAG via Pinecone + PubMed. When the supervisor provides a targeted subquery
+    (e.g. "SBSPON HSDL2 steroid dehydrogenase"), this node runs that specific search
+    and MERGES the results into existing literature_results — enabling refinement loops
+    where the agent searches progressively more specific queries per discovery round.
     """
     disease   = state.get("disease_term", "")
     dge_index = {r["gene"]: r for r in state.get("dge_results", [])}
     ppi_index = {r["gene"]: r for r in state.get("ppi_results", []) if r}
-    genes     = state.get("top_genes", [])[:settings.max_genes_for_rag]
+    subquery  = (state.get("supervisor_subquery") or "").strip()
 
-    def _fetch(gene: str) -> dict:
+    existing_lit = {r["gene"]: r for r in state.get("literature_results", []) if r}
+
+    if subquery:
+        # Targeted search: the supervisor wants a specific gene+context combination.
+        # Parse out the focal gene (first token) and use the rest as extra context.
+        parts = subquery.split(None, 1)
+        focal_gene   = parts[0]
+        extra_context = parts[1] if len(parts) > 1 else ""
+        context = f"Disease: {disease}. Targeted query: {extra_context}"
+        ppi_entry    = ppi_index.get(focal_gene, {})
+        top_partners = [p["partner"] for p in ppi_entry.get("partners", [])[:3] if p.get("partner")]
         try:
-            dge_entry = dge_index.get(gene, {})
-            context   = (
-                f"Disease: {disease}. "
-                f"log2FC={dge_entry.get('log2FoldChange', 'N/A')}, "
-                f"padj={dge_entry.get('padj', 'N/A')}"
-            )
-            ppi_entry   = ppi_index.get(gene, {})
-            top_partners = [p["partner"] for p in ppi_entry.get("partners", [])[:3] if p.get("partner")]
-            return query_literature(gene, context=context, ppi_partners=top_partners)
+            result = query_literature(focal_gene, context=context, ppi_partners=top_partners)
+            # Merge: targeted search enriches (or creates) the gene's lit entry
+            if focal_gene in existing_lit:
+                merged = dict(existing_lit[focal_gene])
+                merged["abstracts"]  = (merged.get("abstracts", []) + result.get("abstracts", []))[:10]
+                merged["key_pmids"]  = list(set(merged.get("key_pmids", []) + result.get("key_pmids", [])))
+                merged["pubmed_hits"] = max(merged.get("pubmed_hits", 0), result.get("pubmed_hits", 0))
+                existing_lit[focal_gene] = merged
+            else:
+                existing_lit[focal_gene] = result
         except Exception as e:
-            return {"gene": gene, "pubmed_hits": 0, "abstracts": [], "is_dark": True, "error": str(e)}
+            existing_lit.setdefault(focal_gene, {"gene": focal_gene, "error": str(e), "is_dark": True})
 
-    literature_results = [None] * len(genes)
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = {pool.submit(_fetch, g): i for i, g in enumerate(genes)}
-        for fut in as_completed(futures):
-            literature_results[futures[fut]] = fut.result()
+        literature_results = list(existing_lit.values())
+        is_targeted = True
+    else:
+        # Broad search: standard per-gene parallel fetch
+        genes = state.get("top_genes", [])[:settings.max_genes_for_rag]
 
-    return {"literature_results": literature_results, "status": "rag_complete", "progress": 60}
+        def _fetch(gene: str) -> dict:
+            try:
+                dge_entry = dge_index.get(gene, {})
+                context   = (
+                    f"Disease: {disease}. "
+                    f"log2FC={dge_entry.get('log2FoldChange', 'N/A')}, "
+                    f"padj={dge_entry.get('padj', 'N/A')}"
+                )
+                ppi_entry    = ppi_index.get(gene, {})
+                top_partners = [p["partner"] for p in ppi_entry.get("partners", [])[:3] if p.get("partner")]
+                return query_literature(gene, context=context, ppi_partners=top_partners)
+            except Exception as e:
+                return {"gene": gene, "pubmed_hits": 0, "abstracts": [], "is_dark": True, "error": str(e)}
+
+        results_list = [None] * len(genes)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(_fetch, g): i for i, g in enumerate(genes)}
+            for fut in as_completed(futures):
+                results_list[futures[fut]] = fut.result()
+        literature_results = results_list
+        is_targeted = False
+
+    # Build supervisor-readable summary
+    hit_summaries = []
+    for r in literature_results:
+        if not r:
+            continue
+        hits  = r.get("pubmed_hits", 0)
+        dark  = r.get("is_dark", False)
+        pmids = r.get("key_pmids", [])
+        hit_summaries.append(
+            f"{r.get('gene', '?')}: {hits} PubMed hits"
+            + (" [DARK]" if dark else "")
+            + (f" PMIDs={pmids[:3]}" if pmids else "")
+        )
+
+    ctx_entry = {
+        "step": "literature_rag",
+        "subquery": subquery or "all top genes",
+        "summary": "; ".join(hit_summaries) if hit_summaries else "No literature results",
+        "is_targeted": is_targeted,
+    }
+
+    return {
+        "literature_results": literature_results,
+        "supervisor_context": [ctx_entry],
+        "status": "rag_complete",
+        "progress": 60,
+    }
 
 
 # ── Node 5: Drug & protein annotation ───────────────────────────────────────
 
 def node_drug_annotation(state: AgentState) -> dict:
-    """Fetch UniProt + ChEMBL in parallel across genes."""
-    genes = state.get("top_genes", [])[:10]
+    """
+    Fetch UniProt + ChEMBL for top genes.  When the supervisor targets a specific gene
+    (e.g. a PPI partner like HSDL2 that might be druggable as a proxy target), this node
+    fetches drug data for that gene and MERGES it into the existing drug_interactions list.
+    This is how the agent discovers "undruggable gene → druggable interactor" opportunities.
+    """
+    subquery = (state.get("supervisor_subquery") or "").strip()
+    existing_drugs = {r["gene"]: r for r in state.get("drug_interactions", []) if r}
 
     def _fetch(gene: str) -> dict:
         try:
-            uniprot      = search_protein(gene)
+            uniprot       = search_protein(gene)
             chembl_result = get_drug_interactions(gene, max_results=5)
             return {
-                "gene": gene,
-                "drugs": chembl_result.get("drugs", []),
-                "query_note": chembl_result.get("query_note", ""),
+                "gene":               gene,
+                "drugs":              chembl_result.get("drugs", []),
+                "query_note":         chembl_result.get("query_note", ""),
                 "query_found_target": chembl_result.get("query_found_target", False),
-                "uniprot": uniprot,
+                "uniprot":            uniprot,
             }
         except Exception as e:
             return {
-                "gene": gene,
-                "drugs": [],
-                "query_note": f"Annotation failed: {str(e)}",
+                "gene":               gene,
+                "drugs":              [],
+                "query_note":         f"Annotation failed: {str(e)}",
                 "query_found_target": False,
-                "uniprot": None,
+                "uniprot":            None,
             }
 
-    drug_interactions = [None] * len(genes)
+    if subquery and subquery not in existing_drugs:
+        # Supervisor is following up on a specific gene (typically a PPI partner)
+        result = _fetch(subquery)
+        existing_drugs[subquery] = result
+        drug_interactions = list(existing_drugs.values())
+        is_followup = True
+    else:
+        # Standard pass: fetch all top genes in parallel
+        genes = state.get("top_genes", [])[:10]
+        results_list = [None] * len(genes)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(_fetch, g): i for i, g in enumerate(genes)}
+            for fut in as_completed(futures):
+                results_list[futures[fut]] = fut.result()
+        # Merge with any follow-up entries already in state
+        for r in results_list:
+            if r:
+                existing_drugs[r["gene"]] = r
+        drug_interactions = list(existing_drugs.values())
+        is_followup = False
+
+    # Build supervisor-readable summary
+    drug_summaries = []
+    for r in drug_interactions:
+        if not r:
+            continue
+        drugs    = r.get("drugs", [])
+        resolved = r.get("query_found_target", False)
+        names    = [d["molecule_name"] for d in drugs[:3]]
+        drug_summaries.append(
+            f"{r['gene']}: {'target resolved' if resolved else 'no ChEMBL target'}"
+            + (f" drugs=[{', '.join(names)}]" if names else " (0 compounds)")
+        )
+
+    ctx_entry = {
+        "step":        "drug_annotation",
+        "subquery":    subquery or "all top genes",
+        "summary":     "; ".join(drug_summaries) if drug_summaries else "No drug data retrieved",
+        "is_followup": is_followup,
+    }
+
+    return {
+        "drug_interactions":  drug_interactions,
+        "supervisor_context": [ctx_entry],
+        "status":             "annotation_complete",
+        "progress":           75,
+    }
+
+
+# ── Node: DepMap CRISPR essentiality ────────────────────────────────────────
+
+def node_depmap_query(state: AgentState) -> dict:
+    """
+    Query DepMap Chronos essentiality scores for top genes (or a supervisor-targeted gene).
+
+    Key signals for the supervisor:
+    - mean_chronos << -0.5  → cancer cell lines die when this gene is knocked out
+    - is_strongly_selective → dependency is cancer-type specific (precision medicine angle)
+    - is_common_essential   → essential in all lines — therapeutic window concern
+    - percent_dependent     → what fraction of cell lines show dependency
+
+    This is especially valuable for dark genes: low PubMed count + high essentiality =
+    genuinely understudied critical dependency, not just an obscure gene.
+    """
+    subquery = (state.get("supervisor_subquery") or "").strip()
+    existing = {r["gene"]: r for r in state.get("depmap_results", []) if r}
+
+    if subquery and subquery not in existing:
+        genes       = [subquery]
+        is_followup = True
+    else:
+        genes       = [g for g in state.get("top_genes", [])[:10] if g not in existing]
+        is_followup = False
+
+    new_results: list[dict] = []
     with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = {pool.submit(_fetch, g): i for i, g in enumerate(genes)}
+        futures = {pool.submit(get_gene_essentiality, g): g for g in genes}
         for fut in as_completed(futures):
-            drug_interactions[futures[fut]] = fut.result()
+            new_results.append(fut.result())
 
-    return {"drug_interactions": drug_interactions, "status": "annotation_complete", "progress": 75}
+    merged = {**existing, **{r["gene"]: r for r in new_results if r}}
+    depmap_results = list(merged.values())
+
+    # Build supervisor-readable summary
+    summaries = []
+    for r in new_results:
+        if r.get("error") and not r.get("mean_chronos"):
+            summaries.append(f"{r['gene']}: DepMap unavailable ({r['error']})")
+            continue
+        mc  = r.get("mean_chronos")
+        pct = r.get("percent_dependent")
+        flags = []
+        if r.get("is_common_essential"):
+            flags.append("COMMON_ESSENTIAL")
+        elif r.get("is_strongly_selective"):
+            flags.append("SELECTIVE")
+        mc_str  = f"chronos={mc:.3f}" if mc is not None else "chronos=N/A"
+        pct_str = f"{pct}% dependent" if pct is not None else ""
+        lins    = r.get("top_lineages", [])
+        lin_str = f" top_lineages=[{', '.join(lins[:3])}]" if lins else ""
+        summaries.append(
+            f"{r['gene']}: {mc_str}, {pct_str}"
+            + (f" [{', '.join(flags)}]" if flags else "")
+            + lin_str
+        )
+
+    ctx_entry = {
+        "step":        "depmap_query",
+        "subquery":    subquery or "all top genes",
+        "summary":     "; ".join(summaries) if summaries else "No DepMap data retrieved",
+        "is_followup": is_followup,
+    }
+
+    return {
+        "depmap_results":      depmap_results,
+        "supervisor_context":  [ctx_entry],
+        "status":              "depmap_complete",
+        "progress":            45,
+    }
 
 
-# ── Node 5: LLM hypothesis synthesis ────────────────────────────────────────
+# ── Node: OpenTargets association ────────────────────────────────────────────
+
+def node_opentargets_query(state: AgentState) -> dict:
+    """
+    Query the OpenTargets Platform for disease-gene association scores.
+
+    The overall_score (0-1) aggregates seven evidence streams:
+      genetic_association  GWAS / rare variant burden tests
+      somatic_mutation     COSMIC cancer driver evidence
+      known_drug           approved or clinical-stage drugs
+      affected_pathway     target in a disease-relevant pathway
+      literature           PubMed co-mention frequency
+      rna_expression       TCGA / GTEx differential expression
+      animal_model         mouse/zebrafish knockout phenotypes
+
+    Score interpretation for supervisor:
+      0.00–0.10  No meaningful evidence → genuine white space, investigate boldly
+      0.10–0.35  Low evidence → worth developing
+      0.35–0.65  Moderate evidence → validate mechanism, competitive landscape emerging
+      0.65–1.00  Strong evidence → highly studied, focus hypothesis on novelty angle
+    """
+    subquery = (state.get("supervisor_subquery") or "").strip()
+    disease  = state.get("disease_term", "")
+    existing = {r["gene"]: r for r in state.get("opentargets_results", []) if r}
+
+    if subquery and subquery not in existing:
+        genes       = [subquery]
+        is_followup = True
+    else:
+        genes       = [g for g in state.get("top_genes", [])[:10] if g not in existing]
+        is_followup = False
+
+    new_results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(get_ot_association, g, disease): g for g in genes}
+        for fut in as_completed(futures):
+            new_results.append(fut.result())
+
+    merged = {**existing, **{r["gene"]: r for r in new_results if r}}
+    ot_results = list(merged.values())
+
+    # Build supervisor-readable summary
+    summaries = []
+    for r in new_results:
+        if r.get("error") and r["overall_score"] == 0.0:
+            summaries.append(f"{r['gene']}: OT unavailable ({r['error']})")
+            continue
+        sc   = r["overall_score"]
+        # Surface the highest-scoring subtypes for context
+        subtypes = {
+            "genetics":  r["genetic_association"],
+            "mutations": r["somatic_mutation"],
+            "drugs":     r["known_drug"],
+            "pathways":  r["affected_pathway"],
+            "expr":      r["rna_expression"],
+        }
+        top_subs = sorted(subtypes.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_str  = ", ".join(f"{k}={v:.2f}" for k, v in top_subs if v > 0.01)
+        summaries.append(
+            f"{r['gene']}: OT_score={sc:.3f}"
+            + (f" [{top_str}]" if top_str else " [no evidence types scored]")
+        )
+
+    ctx_entry = {
+        "step":        "opentargets_query",
+        "subquery":    subquery or "all top genes",
+        "summary":     "; ".join(summaries) if summaries else "No OpenTargets data retrieved",
+        "is_followup": is_followup,
+    }
+
+    return {
+        "opentargets_results": ot_results,
+        "supervisor_context":  [ctx_entry],
+        "status":              "ot_complete",
+        "progress":            50,
+    }
+
+
+# ── Supervisor node ──────────────────────────────────────────────────────────
+
+_SUPERVISOR_PROMPT = """\
+You are the research director of a computational drug-discovery team.
+Your job is to orchestrate an iterative investigation into a set of upregulated genes
+and decide — based on accumulated findings — what to investigate next.
+
+You have five worker tools:
+
+  "enrich_ppi"        Fetch STRING protein-protein interaction network + GO annotation.
+                      Subquery = a specific gene name (focal gene or an interesting partner).
+                      Use first — PPI context informs every downstream decision.
+
+  "literature_rag"    Search PubMed + semantic literature index (Pinecone).
+                      Subquery = targeted search string, e.g. "SBSPON HSDL2 steroid dehydrogenase".
+                      Best for dark genes or follow-up on a specific mechanistic angle.
+
+  "drug_annotation"   Check ChEMBL + UniProt for known drugs and protein structure.
+                      Subquery = gene name (can be a PPI partner for proxy druggability).
+
+  "depmap_query"      Query DepMap CRISPR Chronos essentiality scores.
+                      Subquery = gene name to focus on (or empty for all top genes).
+                      KEY USE: dark genes with sparse literature — high essentiality confirms
+                      the gene is a real cancer dependency despite lack of papers.
+                      Chronos < -0.5 = meaningful dependency; "strongly_selective" = cancer-
+                      type specific (best target profile); "common_essential" = toxicity risk.
+
+  "opentargets_query" Query OpenTargets Platform for disease-gene association evidence.
+                      Subquery = gene name (or empty for all top genes).
+                      Returns overall_score (0-1) + breakdown: genetic_association,
+                      somatic_mutation, known_drug, affected_pathway, rna_expression.
+                      KEY USE: validate whether a DGE hit has supporting multi-omic evidence.
+                      Score near 0 = no prior evidence (genuine white space for dark genes).
+                      Score near 1 = heavily studied (focus hypothesis on novelty angle).
+
+  "finalize"          Enough evidence gathered — proceed to hypothesis synthesis.
+
+RECOMMENDED STRATEGY:
+1. Round 1: enrich_ppi for all top genes (no subquery) — always do this first.
+2. Round 2: depmap_query + opentargets_query for all top genes — these give you the
+   essentiality and multi-omic validation landscape before diving into literature.
+3. Round 3+: Targeted follow-up based on what you found:
+   - Dark gene (low OT score, low PubMed) + high DepMap essentiality → literature_rag
+     with "GENE PARTNER mechanism" to find mechanistic clues.
+   - No ChEMBL drugs on focal gene but has PPI partner → drug_annotation with partner name.
+   - Specific PPI partner looks interesting (oncogene, high OT score) → enrich_ppi subquery.
+4. Finalize after 2-3 refinement rounds or when all top genes have good evidence coverage.
+
+PRUNING: After each round you may prune genes with no PPI partners, no DepMap essentiality,
+OT score < 0.01, and no literature. Only prune when confident — when in doubt, keep the gene.
+
+OUTPUT: Respond with ONLY valid JSON (no fences, no commentary):
+{"next_step": "<enrich_ppi|literature_rag|drug_annotation|depmap_query|opentargets_query|finalize>",
+ "subquery": "<specific gene or search string, or empty string for broad pass>",
+ "reasoning": "<one sentence explaining this decision>",
+ "prune_genes": ["<gene_symbol>", "..."]}
+"""
+
+
+def _format_supervisor_context(state: AgentState) -> str:
+    """Format accumulated supervisor_context into a readable history for the supervisor LLM."""
+    entries = state.get("supervisor_context", [])
+    if not entries:
+        return "No investigation history yet — this is the first decision point."
+    lines = []
+    for i, entry in enumerate(entries, 1):
+        lines.append(
+            f"Round {i} [{entry.get('step', '?')}]"
+            + (f" (query: {entry['subquery']})" if entry.get("subquery") else "")
+            + f"\n  → {entry.get('summary', 'No summary')}"
+        )
+    return "\n".join(lines)
+
+
+def node_supervisor(state: AgentState) -> dict:
+    """
+    LLM-based research director. Reads accumulated findings and decides:
+    - Which worker node to call next (enrich_ppi / literature_rag / drug_annotation)
+    - What targeted subquery to pass (specific gene or search string)
+    - OR: enough evidence gathered — route to 'finalize' (hypothesis synthesis)
+
+    This is the core agentic loop: the supervisor can call the same node multiple times
+    with progressively refined queries (e.g. broad PPI → targeted lit search on a partner).
+    """
+    iteration = state.get("supervisor_iterations", 0)
+
+    # Hard cap: always finalize after 8 iterations to prevent infinite loops
+    if iteration >= 8:
+        return {
+            "next_step":             "finalize",
+            "supervisor_subquery":   "",
+            "supervisor_reasoning":  "Iteration cap reached — finalizing.",
+            "supervisor_iterations": iteration + 1,
+            "status":                "supervisor_finalizing",
+            "progress":              80,
+        }
+
+    # On the very first call (no context yet), always start with broad PPI
+    context_entries = state.get("supervisor_context", [])
+    if not context_entries:
+        return {
+            "next_step":             "enrich_ppi",
+            "supervisor_subquery":   "",
+            "supervisor_reasoning":  "First pass: fetching PPI for all top genes.",
+            "supervisor_iterations": iteration + 1,
+            "status":                "supervisor_routing",
+            "progress":              35,
+        }
+
+    llm = _llm()
+    disease   = state.get("disease_term", "unknown disease")
+    top_genes = state.get("top_genes", [])[:5]
+    context   = _format_supervisor_context(state)
+
+    prompt = f"""Disease under investigation: {disease}
+Top upregulated genes: {top_genes}
+Supervisor loop iteration: {iteration + 1} of 8 max
+
+INVESTIGATION HISTORY SO FAR:
+{context}
+
+Based on these findings, what should be investigated next?
+Remember the strategy: follow sparse literature with targeted partner-gene queries,
+check PPI partners for druggability when focal genes are undruggable, then finalize
+when you have substantive findings for all top genes."""
+
+    try:
+        response = llm.invoke([
+            SystemMessage(content=_SUPERVISOR_PROMPT),
+            HumanMessage(content=prompt),
+        ])
+        import re
+        match = re.search(r"\{.*\}", response.content, re.DOTALL)
+        parsed = json.loads(match.group()) if match else {}
+        next_step   = parsed.get("next_step", "finalize")
+        subquery    = parsed.get("subquery", "")
+        reasoning   = parsed.get("reasoning", "")
+        prune_genes = [g for g in parsed.get("prune_genes", []) if isinstance(g, str)]
+    except Exception as e:
+        next_step   = "finalize"
+        subquery    = ""
+        reasoning   = f"Supervisor parse error ({e}) — finalizing."
+        prune_genes = []
+
+    valid_steps = {"enrich_ppi", "literature_rag", "drug_annotation",
+                   "depmap_query", "opentargets_query", "finalize"}
+    if next_step not in valid_steps:
+        next_step = "finalize"
+
+    # Apply pruning: remove dead-end genes from active investigation list
+    current_genes = state.get("top_genes", [])
+    if prune_genes:
+        pruned_set   = set(prune_genes)
+        current_genes = [g for g in current_genes if g not in pruned_set]
+
+    prune_note = f" Pruned: {prune_genes}." if prune_genes else ""
+    ctx_entry = {
+        "step":     "supervisor",
+        "subquery": "",
+        "summary":  f"Decision: {next_step}" + (f" (query: {subquery})" if subquery else "") + f". {reasoning}{prune_note}",
+    }
+
+    return {
+        "top_genes":             current_genes,
+        "pruned_genes":          (state.get("pruned_genes", []) + prune_genes),
+        "next_step":             next_step,
+        "supervisor_subquery":   subquery,
+        "supervisor_reasoning":  reasoning,
+        "supervisor_iterations": iteration + 1,
+        "supervisor_context":    [ctx_entry],
+        "status":                "supervisor_routing" if next_step != "finalize" else "supervisor_finalizing",
+        "progress":              35 + min(iteration * 5, 40),
+    }
+
+
+# ── Node 6: LLM hypothesis synthesis ────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
 You are PharmaGPT, a senior computational biologist writing drug-target discovery briefs.
@@ -299,26 +808,34 @@ def _novelty_from_pub_count(pub_count: int) -> float:
     return round(max(0.0, 1.0 - math.log10(max(1, pub_count)) / 4.0), 2)
 
 def node_synthesize_hypotheses(state: AgentState) -> dict:
-    """Use the LLM (Chain-of-Thought) to generate therapeutic hypotheses."""
-    llm = _llm()
-    hypotheses = []
+    """
+    LLM hypothesis synthesis — now informed by the full supervisor investigation history.
+
+    The supervisor_context contains every round of PPI, literature, and drug queries
+    (including targeted follow-up rounds), so the synthesis prompt is much richer than
+    the initial pre-fetched context alone. This includes:
+    - Targeted literature results from partner-gene queries (e.g. "SBSPON HSDL2")
+    - Drug data for PPI neighbors discovered as proxy targets
+    - Supervisor reasoning that guided the investigation strategy
+    """
+    llm          = _llm()
+    hypotheses   = []
     disease_term = state.get("disease_term", "")
 
-    # Build gene context dict
-    gene_context = _build_gene_context(state)
-    dark_genes = [g for g in state.get("literature_results", []) if g.get("is_dark")]
-
+    gene_context    = _build_gene_context(state)
+    dark_genes      = [g for g in state.get("literature_results", []) if g and g.get("is_dark")]
     pathway_results = state.get("pathway_results", [])
+    sup_context     = _format_supervisor_context(state)
 
-    # Fetch all PubMed counts in parallel before any LLM calls
+    # Fetch all PubMed counts in parallel
     top_context = gene_context[:5]
     with ThreadPoolExecutor(max_workers=5) as pool:
         count_futures = {pool.submit(_get_pubmed_count, gd["gene"]): gd for gd in top_context}
         for fut in as_completed(count_futures):
             gd = count_futures[fut]
             pc = fut.result()
-            gd["_pub_count"]      = pc
-            gd["_novelty_score"]  = _novelty_from_pub_count(pc)
+            gd["_pub_count"]     = pc
+            gd["_novelty_score"] = _novelty_from_pub_count(pc)
 
     for gene_data in top_context:
         gene          = gene_data["gene"]
@@ -326,7 +843,9 @@ def node_synthesize_hypotheses(state: AgentState) -> dict:
         pub_count     = gene_data.get("_pub_count", -1)
 
         try:
-            prompt = _build_hypothesis_prompt(gene_data, dark_genes, pathway_results, disease_term)
+            prompt = _build_hypothesis_prompt(
+                gene_data, dark_genes, pathway_results, disease_term, sup_context
+            )
             response = llm.invoke([
                 SystemMessage(content=_SYSTEM_PROMPT),
                 HumanMessage(content=prompt),
@@ -335,13 +854,13 @@ def node_synthesize_hypotheses(state: AgentState) -> dict:
             hypotheses.append(hypothesis)
         except Exception as e:
             hypotheses.append({
-                "gene": gene,
-                "hypothesis": f"Analysis failed: {str(e)}",
-                "mechanism": "",
-                "novelty_score": novelty_score,
-                "pub_count": pub_count,
-                "supporting_evidence": [],
-                "key_pmids": gene_data.get("literature", {}).get("key_pmids", []),
+                "gene":               gene,
+                "hypothesis":         f"Analysis failed: {str(e)}",
+                "mechanism":          "",
+                "novelty_score":      novelty_score,
+                "pub_count":          pub_count,
+                "supporting_evidence":[],
+                "key_pmids":          gene_data.get("literature", {}).get("key_pmids", []),
             })
 
     return {"hypotheses": hypotheses, "status": "synthesis_complete", "progress": 90}
@@ -379,7 +898,7 @@ def _format_pathways(pathway_results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_hypothesis_prompt(gene_data: dict, dark_genes: list, pathway_results: list = None, disease_term: str = "") -> str:
+def _build_hypothesis_prompt(gene_data: dict, dark_genes: list, pathway_results: list = None, disease_term: str = "", supervisor_context: str = "") -> str:
     g = gene_data["gene"]
     dge = gene_data["dge"]
     ppi = gene_data["ppi"]
@@ -392,116 +911,79 @@ def _build_hypothesis_prompt(gene_data: dict, dark_genes: list, pathway_results:
     padj     = dge.get("padj", "N/A")
     lfc      = f"{lfc_raw:.3f}" if isinstance(lfc_raw, float) else str(lfc_raw)
 
-    # GO / Reactome annotation (from MyGene.info)
-    go_ann           = ppi.get("go_annotation", {})
-    mf_terms         = go_ann.get("mf_terms", [])
-    bp_terms         = go_ann.get("bp_terms", [])
-    reactome_members = go_ann.get("reactome_pathways", [])
-
     # PPI — annotate partners with their top MF term where available
     ppi_partners = ppi.get("partners", [])
     partners = []
     for p in ppi_partners[:6]:
-        name   = p.get("partner", "")
-        mf     = p.get("mf_terms", [])
+        name = p.get("partner", "")
+        mf   = p.get("mf_terms", [])
         partners.append(f"{name} ({mf[0]})" if mf else name)
     oncogene_partners = [p["partner"] for p in ppi_partners if p.get("is_oncogene")]
 
-    lit_summary  = lit.get("summary") or lit.get("mechanism_summary", "")
-    key_pmids    = lit.get("key_pmids", [])
+    key_pmids = lit.get("key_pmids", [])
 
-    # Drug data with honest API context
-    chembl_drugs   = [d["molecule_name"] for d in drugs.get("drugs", [])]
-    chembl_note    = drugs.get("query_note", "")
-    target_found   = drugs.get("query_found_target", False)
-    lit_drugs      = lit.get("known_drugs", [])
-    all_drugs      = list(dict.fromkeys(chembl_drugs + lit_drugs))   # de-dupe, preserve order
+    # Drug data
+    chembl_drugs = [d["molecule_name"] for d in drugs.get("drugs", [])]
+    lit_drugs    = lit.get("known_drugs", [])
+    all_drugs    = list(dict.fromkeys(chembl_drugs + lit_drugs))
+    chembl_note  = drugs.get("query_note", "")
+    target_found = drugs.get("query_found_target", False)
 
-    uniprot          = drugs.get("uniprot") or {}
-    protein_function = uniprot.get("function", "Unknown")
-    pdb_ids          = uniprot.get("pdb_ids", [])
-
-    dark_genes_str = ", ".join([d["gene"] for d in dark_genes])
-    pathways_str   = _format_pathways(pathway_results or [])
-    gene_pathways  = [
+    gene_pathways = [
         p["pathway"] for p in (pathway_results or [])
         if g in p.get("overlap_genes", [])
     ]
-
+    in_pathways   = bool(gene_pathways)
     pub_count_str = str(pub_count) if pub_count >= 0 else "query failed"
     disease_label = disease_term.strip() if disease_term.strip() else "the disease"
-    in_pathways = bool(gene_pathways)
 
     return f"""
 Analyze gene **{g}** as a potential therapeutic target in **{disease_label}**.
 
-## DGE Data
-- log2 Fold Change (disease vs control): {lfc}
-- Adjusted p-value: {padj}
-
-## Molecular Function (MyGene.info / Gene Ontology)
-- GO Molecular Function: {mf_terms if mf_terms else "Not retrieved"}
-- GO Biological Process (top terms): {bp_terms if bp_terms else "Not retrieved"}
-- Reactome pathway membership (confirmed): {reactome_members if reactome_members else "None on file"}
-  Note: These are direct memberships from Reactome — not enrichment-based inferences.
-
-## Protein Information (UniProt)
-- Function: {protein_function}
-- Structural data (PDB IDs): {pdb_ids if pdb_ids else "None on file"}
-
-## Pathway Enrichment (KEGG / GO BP / Reactome, redundancy-filtered)
-All DEGs — top enriched pathways:
-{pathways_str}
-Pathways where **{g}** is a direct overlap gene: {gene_pathways if gene_pathways else "None detected"}
+## DGE (supporting_evidence only — do NOT put these numbers in hypothesis)
+- log2 Fold Change: {lfc}  |  Adjusted p-value: {padj}
 
 ## Protein-Protein Interactions (STRING DB, high confidence)
-Partners shown as "Name (molecular function)" where MyGene.info annotation is available:
-- Interaction partners: {partners if partners else "None retrieved"}
-- Partners that are known oncogenes: {oncogene_partners if oncogene_partners else "None"}
-
-## Literature (PubMed + Semantic Scholar via Pinecone)
-- PubMed hit count for "{g} AND cancer": {pub_count_str}
-- Classified dark gene (under-studied): {lit.get("is_dark", False)}
-- Key PMIDs retrieved: {key_pmids if key_pmids else "None"}
-- Summary: {lit_summary[:600] if lit_summary else "Not available"}
-- Other dark genes in dataset: {dark_genes_str if dark_genes_str else "None"}
+- Partners: {partners if partners else "None retrieved"}
+- Oncogene partners: {oncogene_partners if oncogene_partners else "None"}
 
 ## Drug Landscape (ChEMBL)
-- Target resolved in ChEMBL: {target_found}
-- Compounds with pChEMBL ≥ 5: {all_drugs if all_drugs else "none found in database"}
-- Context: {chembl_note}
+- ChEMBL target resolved: {target_found}
+- Compounds: {all_drugs if all_drugs else "none found — treat as competitive white space"}
+- Note: {chembl_note}
+
+## Pathway membership
+Direct overlap in enriched pathway: {gene_pathways if gene_pathways else "None — frame any pathway link via interactor distance"}
 
 ## Novelty (pre-calculated — DO NOT change)
 calculated_novelty_score = {novelty_score}
-PubMed cancer publication count: {pub_count_str}
-A score near 1.0 means this gene is understudied with little existing drug coverage — genuine
-competitive white space. A score near 0 means it is heavily studied and well-drugged.
+PubMed cancer hits: {pub_count_str}
 
-## Your Task
+## Supervisor Investigation Log
+The agent iteratively refined its investigation through targeted queries. This is the primary
+source of biological context — PPI partner follow-ups, targeted literature searches, proxy
+druggability findings. Weight this heavily:
+{supervisor_context if supervisor_context else "No supervisor context — rely on data above."}
+
+## Task
 Write a discovery brief for **{g}** in **{disease_label}** that a medicinal chemist or grant
-reviewer would find compelling. Lead with what is *most interesting or surprising* about this
-specific gene — an unusual PPI partner, a structural druggability angle, an extremely high
-expression shift, or the complete absence of drugs on a target that clearly matters.
+reviewer finds compelling. Lead with what is *surprising or distinctive* about this gene.
+Do not open with "{g} is upregulated X-fold." Find an angle.
 
-Do not follow a formula. Do not open with "{g} is upregulated X-fold." Find an angle.
+PATHWAY RULE: {g} {'is a direct member of: ' + str(gene_pathways) if in_pathways else 'is NOT a direct member of any enriched pathway. If you mention a pathway, you MUST frame it as: "its STRING interactors [name them] are enriched in [pathway]"'}
 
-PATHWAY DISTANCE REMINDER: {g} {'is a direct overlap gene in: ' + str(gene_pathways) if in_pathways else 'is NOT a direct overlap gene in any enriched pathway. If you mention pathways in mechanism, you MUST frame them via interactor distance: "While ' + g + ' itself is not an overlap gene, its STRING interactors [name them] are enriched in [pathway]..."'}
+MECHANISM: Name >=2 specific proteins from the PPI list. Describe the exact molecular event —
+phosphorylation site, complex assembled/dissociated, transcriptional target. Never write
+"activates downstream signaling" — name the specific molecular change.
 
-MECHANISM REMINDER: Name ≥2 specific proteins from the PPI list above and describe the exact
-molecular event — substrate phosphorylated, complex assembled/dissociated, transcriptional
-target de-repressed. "Alters metabolic states" or "activates downstream signaling" are
-forbidden — name the thing that changes.
-
-Output ONLY valid JSON (no markdown fences, no text before or after):
+Output ONLY valid JSON:
 {{
   "gene": "{g}",
-  "hypothesis": "<2-4 sentences of biological argument for why {g} matters as a target in {disease_label}. NO raw statistics (no log2FC, no padj). Scientific 'so what' only.>",
-  "mechanism": "<Molecular mechanism naming ≥2 specific PPI partners and a concrete molecular event — phosphorylation site, complex dissociation, transcriptional target, substrate. Be precise.>",
+  "hypothesis": "<2-4 sentences: biological argument for why {g} matters in {disease_label}. No statistics.>",
+  "mechanism": "<Concrete molecular mechanism naming >=2 PPI partners and a specific molecular event.>",
   "novelty_score": {novelty_score},
   "pub_count": {pub_count},
-  "supporting_evidence": [
-    "<3-5 evidence points for {g} specifically — DGE stats (log2FC={lfc}, padj={padj}), pathway overlap or interactor-level enrichment, PPI oncogene connections, literature findings, drug landscape. Not every category needed.>"
-  ],
+  "supporting_evidence": ["<3-5 evidence points: DGE stats (log2FC={lfc}, padj={padj}), pathway context, PPI oncogene links, literature, drug landscape>"],
   "key_pmids": {json.dumps(key_pmids)}
 }}
 """

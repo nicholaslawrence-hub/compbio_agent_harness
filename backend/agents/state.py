@@ -20,7 +20,7 @@ class LiteratureResult(TypedDict):
     gene: str
     pubmed_hits: int
     abstracts: list[dict]
-    is_dark: bool  # True if heavily upregulated but rarely in drug literature
+    is_dark: bool
 
 
 class PathwayResult(TypedDict):
@@ -38,41 +38,83 @@ class DrugInteraction(TypedDict):
     uniprot: Optional[dict]
 
 
+class DepmapResult(TypedDict):
+    gene: str
+    mean_chronos: Optional[float]
+    percent_dependent: Optional[float]
+    is_common_essential: bool
+    is_strongly_selective: bool
+    top_lineages: list[str]
+    n_cell_lines: Optional[int]
+    source: str
+    error: Optional[str]
+
+
+class OTResult(TypedDict):
+    gene: str
+    disease: str
+    overall_score: float
+    genetic_association: float
+    somatic_mutation: float
+    known_drug: float
+    affected_pathway: float
+    literature: float
+    rna_expression: float
+    animal_model: float
+    ensembl_id: Optional[str]
+    efo_id: Optional[str]
+    source: str
+    error: Optional[str]
+
+
 class TherapeuticHypothesis(TypedDict):
     gene: str
     hypothesis: str
     mechanism: str
     novelty_score: float
     supporting_evidence: list[str]
-    key_pmids: list[str]          # PubMed IDs from RAG hits — rendered as citations in UI
-    pub_count: int                # deterministic PubMed publication count used to set novelty_score
+    key_pmids: list[str]
+    pub_count: int
 
 
 class AgentState(TypedDict):
-    # Input
+    # ── Input ────────────────────────────────────────────────────────────────
     disease_term: str
     condition_a: str
     condition_b: str
     count_matrix_path: Optional[str]
     sample_conditions: dict[str, str]
 
-    # Intermediate results
+    # ── Intermediate results ─────────────────────────────────────────────────
     dge_results: list[DGEResult]        # top upregulated (filtered)
-    all_dge_results: list[DGEResult]    # full unfiltered DEG output — used for GSEA ranking & ORA background
-    detected_genes: list[str]           # all gene symbols detected in the count matrix
+    all_dge_results: list[DGEResult]    # full unfiltered — for GSEA & ORA background
+    detected_genes: list[str]           # all symbols detected in count matrix
     top_genes: list[str]
     enrichment_method: str              # 'ORA' or 'GSEA'
     pathway_results: list[PathwayResult]
     ppi_results: list[PPIResult]
     literature_results: list[LiteratureResult]
     drug_interactions: list[DrugInteraction]
+    depmap_results: list[DepmapResult]
+    opentargets_results: list[OTResult]
 
-    # Output
+    # ── Output ───────────────────────────────────────────────────────────────
     hypotheses: Annotated[list[TherapeuticHypothesis], operator.add]
     final_report: Optional[str]
     errors: Annotated[list[str], operator.add]
 
-    # Control flow
+    # ── DGE retry ────────────────────────────────────────────────────────────
+    dge_attempt: int                    # 1 = standard, 2 = lenient re-run
+
+    # ── Supervisor control flow ──────────────────────────────────────────────
+    next_step: str                      # where supervisor routes next
+    supervisor_subquery: str            # targeted query/gene for the next node
+    supervisor_reasoning: str           # one-sentence explanation of decision
+    supervisor_iterations: int          # loop guard — hard-capped at 8
+    supervisor_context: Annotated[list[dict], operator.add]   # per-step finding summaries
+    pruned_genes: list[str]             # genes dropped by supervisor as dead ends
+
+    # ── Progress ─────────────────────────────────────────────────────────────
     current_gene_index: int
     status: str
-    progress: int  # 0-100
+    progress: int                       # 0-100

@@ -72,6 +72,16 @@ async def _run_pipeline(job_id: str, state: AgentState):
                     _jobs[job_id]["errors"] = list(
                         set(_jobs[job_id]["errors"]) | set(node_out["errors"])
                     )
+                # Stream supervisor reasoning + accumulated context to the SSE client
+                if node_out.get("supervisor_reasoning"):
+                    _jobs[job_id]["supervisor_reasoning"] = node_out["supervisor_reasoning"]
+                if node_out.get("supervisor_context"):
+                    _jobs[job_id].setdefault("supervisor_context", [])
+                    # supervisor_context uses operator.add in state, so node_out only
+                    # contains the NEW entries appended by this node — accumulate them.
+                    _jobs[job_id]["supervisor_context"] = (
+                        _jobs[job_id]["supervisor_context"] + node_out["supervisor_context"]
+                    )
         return accumulated
 
     try:
@@ -92,6 +102,8 @@ async def _run_pipeline(job_id: str, state: AgentState):
                 "ppi_results": final_state.get("ppi_results", []),
                 "drug_interactions": final_state.get("drug_interactions", []),
                 "literature_results": final_state.get("literature_results", []),
+                "depmap_results": final_state.get("depmap_results", []),
+                "opentargets_results": final_state.get("opentargets_results", []),
             },
             "errors": final_state.get("errors", []),
         })
@@ -148,12 +160,21 @@ async def start_analysis(
         "ppi_results": [],
         "literature_results": [],
         "drug_interactions": [],
+        "depmap_results": [],
+        "opentargets_results": [],
         "hypotheses": [],
         "final_report": None,
         "errors": [],
-        "current_gene_index": 0,
-        "status": "pending",
-        "progress": 0,
+        "current_gene_index":    0,
+        "dge_attempt":           1,
+        "next_step":             "",
+        "supervisor_subquery":   "",
+        "supervisor_reasoning":  "",
+        "supervisor_iterations": 0,
+        "supervisor_context":    [],
+        "pruned_genes":          [],
+        "status":                "pending",
+        "progress":              0,
     }
 
     _jobs[job_id] = {"status": "queued", "progress": 0, "result": None, "errors": []}
@@ -202,6 +223,8 @@ async def stream_job(job_id: str):
                 "status": j.get("status"),
                 "progress": j.get("progress", 0),
                 "errors": j.get("errors", []),
+                "supervisor_reasoning": j.get("supervisor_reasoning", ""),
+                "supervisor_context": j.get("supervisor_context", []),
             })
             yield f"data: {data}\n\n"
             if j.get("status") in ("complete", "failed", "dge_failed"):

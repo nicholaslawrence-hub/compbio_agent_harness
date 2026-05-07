@@ -1,13 +1,14 @@
 import { CheckCircle } from 'lucide-react'
 
 const STAGES = [
-  { at: 0,   label: 'Queued' },
-  { at: 20,  label: 'DGE Analysis' },
-  { at: 40,  label: 'PPI Enrichment' },
-  { at: 60,  label: 'PubMed RAG' },
-  { at: 75,  label: 'Drug Annotation' },
-  { at: 90,  label: 'LLM Synthesis' },
-  { at: 100, label: 'Complete' },
+  { at: 0,   label: 'Queued',                  sub: 'waiting for worker' },
+  { at: 20,  label: 'DGE  (PyDESeq2)',         sub: 'neg-binomial GLM, BH FDR' },
+  { at: 35,  label: 'Pathway + PPI',           sub: 'ORA / GSEA, STRING DB' },
+  { at: 50,  label: 'DepMap + OpenTargets',    sub: 'CRISPR essentiality, OT scores' },
+  { at: 65,  label: 'Literature RAG',          sub: 'PubMed, Semantic Scholar, Pinecone' },
+  { at: 75,  label: 'Drug Annotation',         sub: 'ChEMBL, UniProt' },
+  { at: 90,  label: 'LLM Synthesis',           sub: 'GPT-5.4-mini chain-of-thought' },
+  { at: 100, label: 'Complete',                sub: '' },
 ]
 
 const GREEN = '#22c55e'
@@ -79,18 +80,28 @@ export default function ProgressBar({ progress = 0 }) {
               {active  && <ActiveIcon />}
               {!done && !active && <QueuedIcon />}
 
-              <span
-                className="text-3xl font-semibold leading-none"
-                style={{
-                  color: done
-                    ? 'rgba(255,255,255,0.3)'
-                    : active
-                      ? '#fff'
-                      : 'rgba(100,116,139,0.22)',
-                }}
-              >
-                {stage.label}
-              </span>
+              <div>
+                <span
+                  className="text-3xl font-semibold leading-none block"
+                  style={{
+                    color: done
+                      ? 'rgba(255,255,255,0.3)'
+                      : active
+                        ? '#fff'
+                        : 'rgba(100,116,139,0.22)',
+                  }}
+                >
+                  {stage.label}
+                </span>
+                {stage.sub && (active || done) && (
+                  <span
+                    className="font-mono text-[10px] tracking-wide mt-0.5 block"
+                    style={{ color: done ? 'rgba(255,255,255,0.15)' : 'rgba(100,116,139,0.7)' }}
+                  >
+                    {stage.sub}
+                  </span>
+                )}
+              </div>
             </div>
           )
         })}
