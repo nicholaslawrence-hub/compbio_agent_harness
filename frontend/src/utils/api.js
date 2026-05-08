@@ -15,6 +15,22 @@ export async function startAnalysis(formData) {
   return res.json()
 }
 
+export async function getSandboxTemplates() {
+  const res = await fetch(`${BASE}/sandbox/templates`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function startSandboxAnalysis(formData) {
+  const res = await fetch(`${BASE}/sandbox/run`, {
+    method: 'POST',
+    headers: authHeader(),
+    body: formData,
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function getJobStatus(jobId) {
   const res = await fetch(`${BASE}/jobs/${jobId}`)
   if (!res.ok) throw new Error(await res.text())

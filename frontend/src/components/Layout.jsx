@@ -16,14 +16,14 @@ export default function Layout() {
           <Link to="/" className="flex items-center gap-3 group" onClick={() => setMenuOpen(false)}>
             <Dna size={26} className="text-amber-400" strokeWidth={1.5} />
             <span className="font-bold text-lg sm:text-xl text-white tracking-tight group-hover:text-amber-400 transition-colors duration-150">
-              RN<span className="text-amber-400 group-hover:text-white transition-colors duration-150">Agent</span>
+              RN<span className="text-amber-400 group-hover:text-amber-400 transition-colors duration-150">Agent</span>
             </span>
           </Link>
 
           {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-2">
             <NavLink
-              to="/gene/EGFR"
+              to="/gene"
               className={({ isActive }) =>
                 `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
                   isActive ? 'text-white' : 'text-white hover:text-white'
@@ -34,6 +34,24 @@ export default function Layout() {
                 <>
                   <Search size={14} strokeWidth={isActive ? 2 : 1.5} />
                   Gene Lookup
+                  {isActive && (
+                    <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
+                  )}
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/sandbox"
+              className={({ isActive }) =>
+                `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
+                  isActive ? 'text-white' : 'text-white hover:text-amber-400'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  Sandbox
                   {isActive && (
                     <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
                   )}
@@ -102,7 +120,7 @@ export default function Layout() {
         {menuOpen && (
           <div className="sm:hidden bg-slate-950 border-t border-slate-800 px-4 py-4 flex flex-col gap-1">
             <NavLink
-              to="/gene/EGFR"
+              to="/gene"
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
@@ -123,6 +141,17 @@ export default function Layout() {
               }
             >
               Run Analysis
+            </NavLink>
+            <NavLink
+              to="/sandbox"
+              onClick={() => setMenuOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-semibold transition-colors ${
+                  isActive ? 'text-white bg-slate-800' : 'text-white hover:text-amber-400 hover:bg-slate-800/50'
+                }`
+              }
+            >
+              Sandbox
             </NavLink>
             {!loading && (
               user ? (
@@ -179,7 +208,8 @@ export default function Layout() {
               <ul className="space-y-3.5">
                 <li><Link to="/"          className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Home</Link></li>
                 <li><Link to="/run"       className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Run Analysis</Link></li>
-                <li><Link to="/gene/EGFR" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Gene Lookup</Link></li>
+                <li><Link to="/sandbox"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sandbox</Link></li>
+                <li><Link to="/gene" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Gene Lookup</Link></li>
               </ul>
             </div>
 

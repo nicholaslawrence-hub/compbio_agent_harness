@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useNavigate } from 'react-router-dom'
-import { FileSpreadsheet, AlertCircle, Plus, Trash2, X } from 'lucide-react'
+import { FileSpreadsheet, AlertCircle, Trash2, X, FileText } from 'lucide-react'
 import { startAnalysis } from '../utils/api.js'
 
 function parsePastedConditions(text) {
@@ -25,6 +25,13 @@ const LABEL = ({ children }) => (
   <p className="text-sm uppercase tracking-wide text-white/60 mb-2">{children}</p>
 )
 
+const OPTIONAL_INPUTS = [
+  { key: 'sample_metadata', label: 'Sample metadata', accept: '.csv,.tsv,.txt', hint: 'sample_id, batch, tissue, sex, age, treatment' },
+  { key: 'phenotype_table', label: 'Phenotype table', accept: '.csv,.tsv,.txt', hint: 'sample_id, response, survival, subtype' },
+  { key: 'mutation_table', label: 'Mutation table', accept: '.csv,.tsv,.txt,.maf', hint: 'gene, variant, sample_id, effect' },
+  { key: 'custom_gene_sets', label: 'Custom gene sets', accept: '.txt,.csv,.tsv,.gmt', hint: 'pathway or signature genes' },
+]
+
 export default function UploadForm() {
   const navigate = useNavigate()
   const [file, setFile]           = useState(null)
@@ -37,6 +44,9 @@ export default function UploadForm() {
   const [pasteError, setPasteError] = useState('')
   const [error, setError]         = useState('')
   const [loading, setLoading]     = useState(false)
+  const [sampleLoading, setSampleLoading] = useState(false)
+  const [optionalFiles, setOptionalFiles] = useState({})
+  const [studyNotes, setStudyNotes] = useState('')
 
   const onDrop = useCallback((accepted) => {
     if (accepted[0]) setFile(accepted[0])
@@ -62,6 +72,52 @@ export default function UploadForm() {
     const next = [...samples]; next[i] = { ...next[i], [field]: value }; setSamples(next)
   }
 
+  const updateOptionalFile = (key, selectedFile) => {
+    setOptionalFiles(prev => ({ ...prev, [key]: selectedFile || null }))
+  }
+
+  const clearOptionalFile = (key) => {
+    setOptionalFiles(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
+  const inputSampleData = async () => {
+    setError('')
+    setSampleLoading(true)
+    try {
+      const res = await fetch('/sample_counts.tsv')
+      if (!res.ok) throw new Error('Could not load sample_counts.tsv')
+      const blob = await res.blob()
+      const sampleFile = new File([blob], 'sample_counts.tsv', { type: 'text/tab-separated-values' })
+      setFile(sampleFile)
+      setDisease('Glioblastoma')
+      setConditionA('disease')
+      setConditionB('control')
+      setSamples([
+        { name: 'D1', condition: 'disease' },
+        { name: 'D2', condition: 'disease' },
+        { name: 'D3', condition: 'disease' },
+        { name: 'D4', condition: 'disease' },
+        { name: 'C1', condition: 'control' },
+        { name: 'C2', condition: 'control' },
+        { name: 'C3', condition: 'control' },
+        { name: 'C4', condition: 'control' },
+      ])
+      setPasteMode(false)
+      setPasteText('')
+      setPasteError('')
+      setOptionalFiles({})
+      setStudyNotes('')
+    } catch (err) {
+      setError(err.message || 'Failed to load sample data.')
+    } finally {
+      setSampleLoading(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setError('')
     if (!file) return setError('Upload a count matrix file.')
@@ -74,6 +130,10 @@ export default function UploadForm() {
     fd.append('sample_conditions', JSON.stringify(Object.fromEntries(validSamples.map(s => [s.name, s.condition]))))
     fd.append('condition_a', conditionA)
     fd.append('condition_b', conditionB)
+    Object.entries(optionalFiles).forEach(([key, value]) => {
+      if (value) fd.append(key, value)
+    })
+    if (studyNotes.trim()) fd.append('study_notes', studyNotes.trim())
     setLoading(true)
     try {
       const { job_id } = await startAnalysis(fd)
@@ -152,52 +212,45 @@ export default function UploadForm() {
         />
       </div>
 
-      {/* ── Case vs Control ───────────────────────────────────── */}
-      <div>
-        <LABEL>Comparison Groups</LABEL>
-        <div className="grid grid-cols-[1fr_48px_1fr] gap-2 items-center">
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 pointer-events-none" />
-            <input
-              className="glass-input w-full rounded-xl pl-7 pr-3 py-3 text-sm"
-              value={conditionA}
-              onChange={e => { setConditionA(e.target.value); setSamples(s => s.map(r => r.condition === conditionA ? { ...r, condition: e.target.value } : r)) }}
-              placeholder="case"
-            />
-          </div>
-          <div className="flex items-center justify-center">
-            <span className="text-xs font-bold text-white/30 tracking-widest">VS</span>
-          </div>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 pointer-events-none" />
-            <input
-              className="glass-input w-full rounded-xl pl-7 pr-3 py-3 text-sm"
-              value={conditionB}
-              onChange={e => setConditionB(e.target.value)}
-              placeholder="control"
-            />
-          </div>
-        </div>
-      </div>
-
       {/* ── Sample conditions ─────────────────────────────────── */}
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
           <LABEL>Sample Conditions</LABEL>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-2 sm:mb-2">
             <button
               type="button"
               onClick={() => { setPasteMode(!pasteMode); setPasteError('') }}
-              className="text-xs text-white/50 hover:text-white transition-colors"
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-white/70 hover:text-white hover:border-slate-500 transition-colors"
             >
-              {pasteMode ? '← manual' : 'paste from sheet'}
+              {pasteMode ? 'Manual entry' : 'Paste from sheet'}
             </button>
-            {!pasteMode && (
-              <button type="button" onClick={addSample}
-                className="flex items-center gap-1 text-xs text-amber-400/70 hover:text-amber-400 transition-colors">
-                <Plus size={11} /> add row
-              </button>
-            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 mb-3">
+          <p className="text-xs uppercase tracking-wide text-white/40 mb-2">Condition labels</p>
+          <div className="grid grid-cols-[1fr_36px_1fr] gap-2 items-center">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 pointer-events-none" />
+              <input
+                className="glass-input w-full rounded-lg pl-7 pr-3 py-2.5 text-sm"
+                value={conditionA}
+                onChange={e => { setConditionA(e.target.value); setSamples(s => s.map(r => r.condition === conditionA ? { ...r, condition: e.target.value } : r)) }}
+                placeholder="case"
+              />
+            </div>
+            <div className="flex items-center justify-center">
+              <span className="text-xs font-bold text-white/30 tracking-widest">VS</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 pointer-events-none" />
+              <input
+                className="glass-input w-full rounded-lg pl-7 pr-3 py-2.5 text-sm"
+                value={conditionB}
+                onChange={e => { setConditionB(e.target.value); setSamples(s => s.map(r => r.condition === conditionB ? { ...r, condition: e.target.value } : r)) }}
+                placeholder="control"
+              />
+            </div>
           </div>
         </div>
 
@@ -227,17 +280,38 @@ export default function UploadForm() {
                   placeholder={`sample_${i + 1}`}
                   value={s.name}
                   onChange={e => updateSample(i, 'name', e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && i === samples.length - 1) {
+                      e.preventDefault()
+                      addSample()
+                    }
+                  }}
                 />
 
-                <select
-                  className={`glass-input rounded-lg px-2 py-2 text-xs border ${chipColor(s.condition)}`}
-                  style={{ background: 'transparent', minWidth: '90px' }}
-                  value={s.condition}
-                  onChange={e => updateSample(i, 'condition', e.target.value)}
-                >
-                  <option value={conditionA} style={{ background: '#0f172a' }}>{conditionA}</option>
-                  <option value={conditionB} style={{ background: '#0f172a' }}>{conditionB}</option>
-                </select>
+                <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-700 bg-slate-950/60 p-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => updateSample(i, 'condition', conditionA)}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                      s.condition === conditionA
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'text-white/55 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {conditionA || 'case'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateSample(i, 'condition', conditionB)}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                      s.condition === conditionB
+                        ? 'bg-blue-400 text-slate-950'
+                        : 'text-white/55 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {conditionB || 'control'}
+                  </button>
+                </div>
 
                 {samples.length > 2 && (
                   <button type="button" onClick={() => removeSample(i)}
@@ -249,7 +323,74 @@ export default function UploadForm() {
             ))}
           </div>
         )}
-        <p className="text-xs text-white/30 mt-2">Names must match column headers exactly.</p>
+      </div>
+
+      {/* Optional context */}
+      <div className="border-t border-slate-800 pt-6">
+        <div className="mb-4">
+          <LABEL>Optional Context</LABEL>
+          <p className="text-sm text-white/70 leading-relaxed">
+            Add study files when they change target priority, cohort interpretation, or mechanism.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {OPTIONAL_INPUTS.map(({ key, label, accept, hint }) => {
+            const selected = optionalFiles[key]
+            return (
+              <div key={key} className="rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{label}</p>
+                    <p className="text-xs text-white/45 mt-0.5">{hint}</p>
+                  </div>
+                  {selected && (
+                    <button
+                      type="button"
+                      onClick={() => clearOptionalFile(key)}
+                      className="text-white/30 hover:text-white/80 transition-colors p-1"
+                      aria-label={`Remove ${label}`}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {selected ? (
+                  <div className="flex items-center gap-3 rounded-lg bg-slate-900 border border-slate-700 px-3 py-3 min-h-16">
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                      <FileText size={15} className="text-white/70" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-white truncate">{selected.name}</p>
+                      <p className="text-[11px] text-white/40 mt-0.5">{(selected.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex min-h-16 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-700 hover:border-slate-500 bg-slate-900/40 px-3 py-3 transition-colors">
+                    <input
+                      type="file"
+                      accept={accept}
+                      className="sr-only"
+                      onChange={e => updateOptionalFile(key, e.target.files?.[0])}
+                    />
+                    <span className="text-xs font-semibold text-white/70">Upload file</span>
+                  </label>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="mt-3">
+          <textarea
+            className="glass-input w-full rounded-xl px-4 py-3 text-sm min-h-28 resize-y"
+            placeholder="Study notes: model system, treatment, subtype, response label, target class to prefer"
+            value={studyNotes}
+            onChange={e => setStudyNotes(e.target.value)}
+            style={{ fontFamily: 'DM Sans, sans-serif' }}
+          />
+        </div>
       </div>
 
       {error && (
@@ -266,6 +407,15 @@ export default function UploadForm() {
         style={{ boxShadow: loading ? 'none' : '0 0 24px rgba(251,191,36,0.25)' }}
       >
         {loading ? 'Launching agent network…' : 'Run Analysis →'}
+      </button>
+
+      <button
+        type="button"
+        onClick={inputSampleData}
+        disabled={loading || sampleLoading}
+        className="w-full py-3 rounded-xl font-semibold text-sm text-amber-300 border border-amber-500/30 bg-amber-400/5 hover:bg-amber-400/10 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {sampleLoading ? 'Loading sample data…' : 'Input sample data'}
       </button>
     </form>
   )

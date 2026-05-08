@@ -41,7 +41,7 @@ const EDGES = [
 
 const CLUSTERS = {
   data:      { label: 'DATA',      color: '#38bdf8', ids: ['dge','ppi','pathway'],         cx: 540, cy: 168 },
-  knowledge: { label: 'KNOWLEDGE', color: '#a78bfa', ids: ['depmap','opentargets','rag'],  cx: 360, cy: 415 },
+  knowledge: { label: 'KNOWLEDGE', color: '#a78bfa', ids: ['depmap','opentargets','rag'],  cx: 360, cy: 405 },
   synthesis: { label: 'SYNTHESIS', color: '#34d399', ids: ['drug','synthesis','report'],   cx: 182, cy: 168 },
 }
 
@@ -59,9 +59,9 @@ const INIT_POS = {
   dge:         { x: 518, y: 112 },
   ppi:         { x: 592, y: 205 },
   pathway:     { x: 516, y: 292 },
-  depmap:      { x: 252, y: 392 },
-  opentargets: { x: 360, y: 440 },
-  rag:         { x: 468, y: 392 },
+  depmap:      { x: 245, y: 386 },
+  opentargets: { x: 360, y: 448 },
+  rag:         { x: 475, y: 386 },
   drug:        { x: 162, y: 288 },
   synthesis:   { x: 115, y: 202 },
   report:      { x: 180, y: 105 },
@@ -356,14 +356,14 @@ export default function AgentWeb() {
   const chat = selected ? CHAT_INFO[selected] : null
 
   return (
-    <div className="space-y-4" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+    <div className="space-y-3 max-w-5xl mx-auto" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
 
       {/* Parallax wrapper */}
       <div ref={wrapRef} style={{ willChange: 'transform' }}>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${VW} ${VH}`}
-          className="w-full select-none"
+          className="w-full max-h-[460px] select-none"
           style={{ touchAction: 'none' }}
           onPointerMove={onSVGPointerMove}
           onPointerUp={e => { if (dragRef.current) onPointerUp(e, dragRef.current.nodeId) }}
@@ -454,8 +454,6 @@ export default function AgentWeb() {
       {chat && (
         <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ background: chat.color, boxShadow: `0 0 8px 2px ${chat.color}55` }} />
             <span className="text-base font-semibold text-white">{chat.header}</span>
             <span className="hidden sm:block text-sm text-white/60 flex-1 leading-snug">{chat.desc}</span>
             <button onClick={() => setSelected(null)}
@@ -469,14 +467,11 @@ export default function AgentWeb() {
             {chat.msgs.map((msg, i) => {
               const isOut = msg.from === 'SUP'
               return (
-                <div key={i} className={`flex items-end gap-3 ${isOut ? '' : 'flex-row-reverse'}`}>
-                  <span className="text-xs font-semibold shrink-0 mb-1 uppercase tracking-wider"
-                    style={{ fontFamily: MONO, color: isOut ? 'rgba(245,158,11,0.6)' : chat.color + '88' }}
-                  >{msg.from}</span>
+                <div key={i} className={`flex items-end ${isOut ? '' : 'justify-end'}`}>
                   <div className="max-w-[82%] px-4 py-3 text-sm leading-relaxed text-white"
                     style={{
-                      background: isOut ? 'rgba(245,158,11,0.09)' : chat.color + '12',
-                      border: `1px solid ${isOut ? 'rgba(245,158,11,0.17)' : chat.color + '28'}`,
+                      background: isOut ? 'rgba(245,158,11,0.18)' : chat.color + '24',
+                      border: `1px solid ${isOut ? 'rgba(245,158,11,0.40)' : chat.color + '55'}`,
                       borderRadius: isOut ? '18px 18px 18px 4px' : '18px 18px 4px 18px',
                     }}
                   >{msg.text}</div>

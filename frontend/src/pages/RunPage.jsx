@@ -65,13 +65,13 @@ export default function RunPage() {
           </div>
 
           {/* Tips */}
-          <div className="glass-panel rounded-2xl p-6">
-            <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-4">Tips</p>
+          <div className="glass-panel rounded-2xl p-6 border border-slate-700/80">
+            <p className="text-sm uppercase tracking-wide text-amber-300 font-semibold mb-4">Tips</p>
             <ul className="space-y-3">
               {TIPS.map((tip, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="text-xs text-amber-400/40 pt-0.5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="text-sm text-white/70 leading-relaxed">{tip}</span>
+                  <span className="text-xs text-amber-300 font-semibold pt-0.5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="text-sm text-white leading-relaxed">{tip}</span>
                 </li>
               ))}
             </ul>

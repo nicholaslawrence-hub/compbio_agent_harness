@@ -19,7 +19,7 @@ const CLUSTERS = [
         activeBg: 'bg-sky-950/40',
         activeBorder: 'border-sky-500/70',
         source: 'PyDESeq2',
-        tagline: 'Conducts RNA-seq differential expression analysis with PyDESeq2.',
+        tagline: 'Conducts RNA-seq analysis with PyDESeq2.',
         description:
           'PyDESeq2 fits a negative binomial GLM to your count matrix, using empirical Bayes dispersion shrinkage to stabilise estimates across genes with low counts. The output is a ranked list of upregulated genes, corrected for multiple testing with Benjamini-Hochberg. A plain t-test on normalised counts gets this wrong at small sample sizes. The GLM gets it right by modelling the variance structure RNA-seq data actually has.',
       },
@@ -75,7 +75,7 @@ const CLUSTERS = [
         activeBg: 'bg-violet-950/40',
         activeBorder: 'border-violet-500/70',
         source: 'OT Platform v4',
-        tagline: 'Compares to a generic disease association profile from OpenTargets.',
+        tagline: 'Compares to an OpenTargets generic association profile.',
         description:
           'The OpenTargets overall score aggregates genetic association, somatic mutation, clinical drug evidence, pathway membership, literature co-mention, RNA expression, and animal model data for every gene-disease pair. Decomposing the score matters: a gene that scores on somatic mutation and approved drugs is in a very different position from one whose score comes entirely from literature co-mention. The supervisor uses the breakdown to decide which agents to pull next.',
       },
@@ -313,8 +313,8 @@ export default function AnalyzePage() {
 
       {/* ── Agent Network ────────────────────────────────────── */}
       <div className="border-t border-slate-800 pt-14">
-        <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-wide">Agent Network</p>
-        <p className="text-base sm:text-lg text-white/70 mb-10 max-w-2xl leading-relaxed">
+        <p className="text-3xl sm:text-4xl font-bold text-white mb-1 tracking-wide">Agent Network</p>
+        <p className="text-sm sm:text-base text-white/70 mb-4 max-w-2xl leading-relaxed">
           RNAgent features a single supervisor node, with 9 specialist agents, each computing a different biological task.
         </p>
         <AgentWeb />
@@ -397,7 +397,7 @@ export default function AnalyzePage() {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between">
-                  <span className="text-xl font-semibold text-white">Novelty score</span>
+                  <span className="text-xl font-semibold text-white">Novelty Score </span>
                   <span className="text-2xl font-bold text-amber-400">
                     {EXAMPLE_GENES.find(g => g.symbol === selectedGene)?.novelty.toFixed(2)}
                   </span>
@@ -447,7 +447,6 @@ export default function AnalyzePage() {
                   >
                     {/* Header row */}
                     <div className="flex items-center gap-3 mb-5">
-                      <span className={`w-3 h-3 rounded-full shrink-0 ${agent.dot} ${isActive ? 'animate-pulse' : ''}`} />
                       <span className={`text-lg font-semibold leading-tight ${isActive ? agent.color : 'text-white'}`}>
                         {agent.label}
                       </span>
