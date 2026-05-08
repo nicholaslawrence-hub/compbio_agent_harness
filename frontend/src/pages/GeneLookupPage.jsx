@@ -181,7 +181,7 @@ export default function GeneLookupPage() {
             ) : (
               <div>
                 <p className="text-white/40 text-sm">No drug-gene literature found.</p>
-                <span className="badge-dark mt-2">Potential Dark Gene</span>
+                <span className="badge-dark mt-2">Potential unstudied gene.</span>
               </div>
             )}
           </Section>

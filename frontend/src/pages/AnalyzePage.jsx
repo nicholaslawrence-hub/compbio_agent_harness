@@ -7,9 +7,9 @@ import AgentWeb from '../components/AgentWeb.jsx'
 const CLUSTERS = [
   {
     label: 'Expression Analysis',
-    color: 'text-sky-300',
+    color: 'text-sky-400',
     divider: 'bg-sky-500/40',
-    description: 'The first pass — turning raw counts into ranked, statistically grounded gene candidates.',
+    description: 'Exploratory data analysis cluster, turning your raw RNA-sequence data into a candidate pool.',
     agents: [
       {
         id: 'dge',
@@ -19,7 +19,7 @@ const CLUSTERS = [
         activeBg: 'bg-sky-950/40',
         activeBorder: 'border-sky-500/70',
         source: 'PyDESeq2',
-        tagline: 'Counts what changed and how much.',
+        tagline: 'Conducts RNA-seq differential expression analysis with PyDESeq2.',
         description:
           'PyDESeq2 fits a negative binomial GLM to your count matrix, using empirical Bayes dispersion shrinkage to stabilise estimates across genes with low counts. The output is a ranked list of upregulated genes, corrected for multiple testing with Benjamini-Hochberg. A plain t-test on normalised counts gets this wrong at small sample sizes. The GLM gets it right by modelling the variance structure RNA-seq data actually has.',
       },
@@ -31,7 +31,7 @@ const CLUSTERS = [
         activeBg: 'bg-orange-950/40',
         activeBorder: 'border-orange-500/70',
         source: 'GSEApy / KEGG / GO',
-        tagline: 'Places your hits in the pathways that matter.',
+        tagline: 'Scrapes through different pathway databases for your gene.',
         description:
           'Over-representation analysis runs against KEGG, GO Biological Process, and Reactome gene sets, using only genes detected in your matrix as the background universe. Benchmarking against the whole genome inflates significance for any study with a narrow detection range, so this matters. When the DEG count falls outside the ORA confidence range, the analysis switches automatically to GSEA preranking on the full differential expression scores. Redundant GO terms are collapsed by Jaccard similarity before anything reaches the report.',
       },
@@ -43,7 +43,7 @@ const CLUSTERS = [
         activeBg: 'bg-indigo-950/40',
         activeBorder: 'border-indigo-500/70',
         source: 'STRING DB',
-        tagline: 'Which proteins your gene is physically talking to.',
+        tagline: 'Finds target gene-protein interactions.',
         description:
           'Protein interactions are pulled from STRING at a combined confidence score of 700 or above, which keeps out low-quality co-expression inferences. Each partner gets cross-referenced against a curated oncogene set, so the supervisor can see immediately whether a dark gene sits next to well-known cancer drivers. GO molecular function terms add mechanistic context. A gene with no known function but three high-confidence oncogene neighbours is worth a harder look.',
       },
@@ -51,7 +51,7 @@ const CLUSTERS = [
   },
   {
     label: 'Target Validation',
-    color: 'text-rose-300',
+    color: 'text-rose-400',
     divider: 'bg-rose-500/40',
     description: 'The supervisor pulls from these tools in whatever order the evidence demands.',
     agents: [
@@ -63,7 +63,7 @@ const CLUSTERS = [
         activeBg: 'bg-rose-950/40',
         activeBorder: 'border-rose-500/70',
         source: 'DepMap Portal',
-        tagline: 'What happens when you knock this gene out across 1,000 cancer lines.',
+        tagline: 'Identifies target gene from the DepMap database.',
         description:
           'The DepMap Chronos scores tell you what happens when you knock a gene out across hundreds of cancer cell lines. Strongly selective essentiality means the gene is lethal in a cancer-type-specific way while normal tissue is spared. That is the target profile you want for a therapeutic. Broadly essential genes are flagged separately as on-target toxicity concerns. Low essentiality is not a dead end, but the supervisor weighs it when deciding how much further to investigate.',
       },
@@ -75,9 +75,9 @@ const CLUSTERS = [
         activeBg: 'bg-violet-950/40',
         activeBorder: 'border-violet-500/70',
         source: 'OT Platform v4',
-        tagline: 'Seven evidence types in one score. The breakdown is what counts.',
+        tagline: 'Compares to a generic disease association profile from OpenTargets.',
         description:
-          'The OpenTargets overall score aggregates genetic association, somatic mutation, clinical drug evidence, pathway membership, literature co-mention, RNA expression, and animal model data for every gene-disease pair. Decomposing the score matters: a gene that scores on somatic mutation and approved drugs is in a very different position from one whose score comes entirely from literature co-mention. The supervisor uses the breakdown, not just the headline number.',
+          'The OpenTargets overall score aggregates genetic association, somatic mutation, clinical drug evidence, pathway membership, literature co-mention, RNA expression, and animal model data for every gene-disease pair. Decomposing the score matters: a gene that scores on somatic mutation and approved drugs is in a very different position from one whose score comes entirely from literature co-mention. The supervisor uses the breakdown to decide which agents to pull next.',
       },
       {
         id: 'literature',
@@ -87,17 +87,17 @@ const CLUSTERS = [
         activeBg: 'bg-cyan-950/40',
         activeBorder: 'border-cyan-500/70',
         source: 'Pinecone / PubMed',
-        tagline: 'Retrieves by meaning, not word match.',
+        tagline: 'Uses Pinecone RAG to find semantically similar clusters.',
         description:
-          'Abstracts are fetched from PubMed and Semantic Scholar, then embedded server-side by Pinecone using llama-text-embed-v2 and stored in a dense vector index. At query time the system retrieves the top hits by cosine similarity, not keyword overlap, so it surfaces papers about a gene\'s mechanism even when the gene symbol does not appear in the title. Fewer than three strong hits and the gene is flagged dark — which is often the most interesting result.',
+          'Abstracts are fetched from PubMed and Semantic Scholar, then embedded server-side by Pinecone using llama-text-embed-v2 and stored in a dense vector index. At query time the system retrieves the top hits by cosine similarity, not keyword overlap, so it surfaces papers about a gene\'s mechanism even when the gene symbol does not appear in the title.',
       },
     ],
   },
   {
     label: 'Discovery',
-    color: 'text-amber-300',
+    color: 'text-amber-400',
     divider: 'bg-amber-500/40',
-    description: 'Where evidence becomes a drug candidate and a testable scientific narrative.',
+    description: 'Report writing and hypothesis generation.',
     agents: [
       {
         id: 'drugs',
@@ -107,9 +107,9 @@ const CLUSTERS = [
         activeBg: 'bg-emerald-950/40',
         activeBorder: 'border-emerald-500/70',
         source: 'ChEMBL / UniProt',
-        tagline: 'What is already in the clinic, and what has never been touched.',
+        tagline: 'Scrapes for drugs targeting your gene already in the market.',
         description:
-          'ChEMBL is queried for binding assay compounds with pChEMBL at or above 5, corresponding to a rough potency ceiling of 10 micromolar. Results are sorted by clinical phase first, then by potency. No hits is itself a finding: high essentiality with a completely empty ChEMBL record is the white-space signature this tool is built to detect. UniProt fills in structural and functional annotation so the hypothesis step has something concrete to build on.',
+          'ChEMBL is queried for binding assay compounds with pChEMBL at or above 5, corresponding to a rough potency ceiling of 10 micromolar. Results are sorted by clinical phase first, then by potency. No hits is itself a finding: high essentiality with a completely empty ChEMBL record is the white-space signature this tool is built to detect. UniProt fills in structural and functional annotation to add further context to the hypothesis.',
       },
       {
         id: 'synthesis',
@@ -119,7 +119,7 @@ const CLUSTERS = [
         activeBg: 'bg-pink-950/40',
         activeBorder: 'border-pink-500/70',
         source: 'GPT-4o / PubMed',
-        tagline: 'One mechanistic hypothesis per target, not a summary.',
+        tagline: 'Generates a mechanistic hypothesis for each gene.',
         description:
           'One hypothesis is generated per gene that survived supervisor pruning. The model reads the full accumulated investigation log rather than raw data structures, so the reasoning reflects everything the network discovered: PPI context, essentiality profile, OpenTargets scores, literature hits, drug landscape. Publication count is fetched fresh from PubMed at synthesis time and converted to a novelty score on a log scale, so a gene with 12 papers scores near 0.7 and one with 10,000 scores near zero. The output is a mechanistic narrative with proposed follow-up experiments, not a summary.',
       },
@@ -131,7 +131,7 @@ const CLUSTERS = [
         activeBg: 'bg-amber-950/40',
         activeBorder: 'border-amber-500/70',
         source: 'GPT-4o',
-        tagline: 'The full investigation compiled into something you can take to a lab meeting.',
+        tagline: 'Compiles a structured report on the entire process.',
         description:
           'After all targets are scored and ranked, GPT-4o reads the complete investigation log and assembles a structured report: executive summary, per-gene mechanism paragraphs, supporting evidence citations, novelty scores, and concrete next-step assays. The format mirrors a preclinical target identification report. If your top hit has 11 papers and no approved inhibitors, that shows up clearly alongside the ChEMBL gap and the DepMap essentiality score, so the case for pursuing it is already in writing.',
       },
@@ -313,9 +313,9 @@ export default function AnalyzePage() {
 
       {/* ── Agent Network ────────────────────────────────────── */}
       <div className="border-t border-slate-800 pt-14">
-        <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-tight">Agent Network</p>
+        <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-wide">Agent Network</p>
         <p className="text-base sm:text-lg text-white/70 mb-10 max-w-2xl leading-relaxed">
-          Nine specialist agents, one supervisor. Click any node to see what each agent does and what it says to the others.
+          RNAgent features a single supervisor node, with 9 specialist agents, each computing a different biological task.
         </p>
         <AgentWeb />
       </div>
@@ -343,7 +343,7 @@ export default function AnalyzePage() {
                       isActive
                         ? 'bg-amber-400/10'
                         : hasSelection
-                          ? 'opacity-40 hover:opacity-70 hover:bg-slate-700/30'
+                          ? 'opacity-45 hover:opacity-65 hover:bg-slate-700/30'
                           : 'hover:bg-slate-700/30 hover:opacity-90'
                     }`}
                   >
@@ -358,13 +358,12 @@ export default function AnalyzePage() {
                         {g.symbol}
                       </span>
                       <div className="flex flex-wrap tabular-nums text-sm sm:text-base text-white gap-x-3">
-                        <span>log₂FC {g.lfc}</span>
-                        <span>padj {g.padj}</span>
+                        <span>log₂FC Score: {g.lfc}</span>
                       </div>
                     </div>
 
                     <AnimatedBar score={g.novelty} visible={leftIn} />
-                    <p className="text-sm text-white mt-2">novelty score</p>
+                    <p className="text-sm text-white sm:text-base">Novelty Score</p>
                   </div>
                 )
               })}
@@ -382,8 +381,8 @@ export default function AnalyzePage() {
               <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="text-3xl">←</div>
                 <p className="text-base font-semibold text-white">Click a gene</p>
-                <p className="text-sm text-white/80 max-w-[200px] leading-relaxed">
-                  Select any target on the left to see the generated mechanism and evidence.
+                <p className="text-sm text-white/80 max-w-[350px] leading-relaxed">
+                  The supervisor agent reads all the specialist outputs and synthesizes a mechanistic hypothesis for each gene, along with a novelty score.
                 </p>
               </div>
             ) : (
@@ -398,7 +397,7 @@ export default function AnalyzePage() {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between">
-                  <span className="text-base font-semibold text-white">Novelty score</span>
+                  <span className="text-xl font-semibold text-white">Novelty score</span>
                   <span className="text-2xl font-bold text-amber-400">
                     {EXAMPLE_GENES.find(g => g.symbol === selectedGene)?.novelty.toFixed(2)}
                   </span>
@@ -413,9 +412,9 @@ export default function AnalyzePage() {
       {/* ── About / Agent Guide ──────────────────────────────── */}
       <div className="border-t border-slate-800 pt-14 space-y-14">
         <div>
-          <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-tight">How it works</p>
+          <p className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-tight">Agent Breakdown</p>
           <p className="text-base sm:text-lg text-white/70 max-w-2xl leading-relaxed">
-            Nine specialist agents, one supervisor. Click any card to see the scientific rationale and data sources behind each step.
+            Click on an agent card to see its function, purpose, and the context it feeds forward through the network.
           </p>
         </div>
 
