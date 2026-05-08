@@ -415,7 +415,7 @@ export default function SandboxPage() {
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-400 px-5 py-4 text-base font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-60 transition-colors"
           >
             <Play size={18} fill="currentColor" />
-            {loading ? 'Starting supervisor' : 'Run sandbox supervisor'}
+            {loading ? 'Starting supervisor' : 'Run sandbox'}
           </button>
         </section>
       </form>

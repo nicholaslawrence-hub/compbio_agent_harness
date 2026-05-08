@@ -3,7 +3,17 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Github, Linkedin, Code2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import AgentWeb from '../components/AgentWeb.jsx'
-
+import {
+  Activity,
+  BookOpen,
+  BrainCircuit,
+  FileSpreadsheet,
+  FlaskConical,
+  Network,
+  Pill,
+  Play,
+  Target,
+} from 'lucide-react'
 const CLUSTERS = [
   {
     label: 'Expression Analysis',
@@ -279,10 +289,9 @@ export default function AnalyzePage() {
           </span>
         </h1>
         <p className="text-base sm:text-lg text-white max-w-xl leading-relaxed">
-          Upload an RNA-seq count matrix and a disease context. A coordinated
-          network of specialist agents runs differential expression, maps protein
-          interaction networks, mines the literature, annotates known drugs, and
-          synthesizes ranked hypotheses — end to end, without leaving the browser.
+          Create your own coordinated network of specialist agents to investigate your RNA-seq count data 
+          and generate hypotheses, all in one seamless workflow.
+          Or use a pre-built agent network to get from raw data to uncovering novel drug targets in minutes.
         </p>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-10 sm:mt-20">
           {user ? (
@@ -296,13 +305,19 @@ export default function AnalyzePage() {
             <>
               <button
                 onClick={() => navigate('/run')}
-                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight shadow-[0_0_28px_rgba(251,191,36,0.30)] text-center"
+                className="border border-slate-600 hover:border-slate-400 text-white/80 hover:text-white font-semibold text-lg sm:text-xl px-10 sm:px-12 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
               >
-                Try the Agent Network
+                Guided Analysis
+              </button>
+              <button
+                onClick={() => navigate('/sandbox')}
+                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-lg sm:text-xl px-14 sm:px-16 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight shadow-[0_0_28px_rgba(251,191,36,0.30)] text-center"
+              >
+                Start Building
               </button>
               <Link
                 to="/login"
-                className="border border-slate-600 hover:border-slate-400 text-white/80 hover:text-white font-semibold text-lg sm:text-xl px-10 sm:px-14 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
+                className="border border-slate-600 hover:border-slate-400 text-white/80 hover:text-white font-semibold text-lg sm:text-xl px-10 sm:px-12 py-5 sm:py-6 rounded-2xl transition-colors duration-150 tracking-tight text-center"
               >
                 Log in / Sign up
               </Link>
@@ -313,9 +328,9 @@ export default function AnalyzePage() {
 
       {/* ── Agent Network ────────────────────────────────────── */}
       <div className="border-t border-slate-800 pt-14">
-        <p className="text-3xl sm:text-4xl font-bold text-white mb-1 tracking-wide">Agent Network</p>
+        <p className="text-3xl sm:text-4xl font-bold text-white mb-1 tracking-wide">Default Agent Network</p>
         <p className="text-sm sm:text-base text-white/70 mb-4 max-w-2xl leading-relaxed">
-          RNAgent features a single supervisor node, with 9 specialist agents, each computing a different biological task.
+          The default RNAgent features a single supervisor node, with 9 specialist agents, each computing a different biological task.
         </p>
         <AgentWeb />
       </div>
