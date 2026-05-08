@@ -84,6 +84,8 @@ class AgentState(TypedDict):
     condition_b: str
     count_matrix_path: Optional[str]
     sample_conditions: dict[str, str]
+    study_context: dict[str, Any]
+    sandbox_config: dict[str, Any]
 
     # ── Intermediate results ─────────────────────────────────────────────────
     dge_results: list[DGEResult]        # top upregulated (filtered)

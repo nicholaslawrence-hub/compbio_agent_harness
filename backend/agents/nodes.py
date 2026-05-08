@@ -641,6 +641,59 @@ def _format_supervisor_context(state: AgentState) -> str:
     return "\n".join(lines)
 
 
+def _format_study_context(state: AgentState) -> str:
+    """Summarize user-provided optional files and notes for prompts."""
+    ctx = state.get("study_context", {}) or {}
+    if not ctx:
+        return "No optional study context provided."
+
+    labels = {
+        "sample_metadata": "Sample metadata",
+        "phenotype_table": "Phenotype table",
+        "mutation_table": "Mutation table",
+        "custom_gene_sets": "Custom gene sets",
+        "study_notes": "Study notes",
+    }
+    lines = []
+    for key, label in labels.items():
+        value = ctx.get(key)
+        if not value:
+            continue
+        if key == "study_notes":
+            lines.append(f"{label}: {str(value)[:1200]}")
+        else:
+            preview = str(value.get("preview", "")).strip().replace("\r\n", "\n")
+            lines.append(
+                f"{label}: {value.get('filename', 'uploaded file')}\n"
+                f"{preview[:1200] if preview else '(no preview text)'}"
+            )
+    return "\n\n".join(lines) if lines else "No optional study context provided."
+
+
+def _sandbox_settings(state: AgentState) -> tuple[set[str], int, str]:
+    """Read optional sandbox constraints without changing the default agent loop."""
+    config = state.get("sandbox_config", {}) or {}
+    all_steps = {
+        "enrich_ppi",
+        "literature_rag",
+        "drug_annotation",
+        "depmap_query",
+        "opentargets_query",
+    }
+    allowed_steps = {step for step in config.get("allowed_agents", []) if step in all_steps}
+    if not allowed_steps:
+        allowed_steps = all_steps
+
+    try:
+        max_iterations = int(config.get("max_iterations", 8))
+    except (TypeError, ValueError):
+        max_iterations = 8
+    max_iterations = max(1, min(8, max_iterations))
+
+    directive = str(config.get("directive", "")).strip()
+    return allowed_steps, max_iterations, directive
+
+
 def node_supervisor(state: AgentState) -> dict:
     """
     LLM-based research director. Reads accumulated findings and decides:
@@ -652,9 +705,10 @@ def node_supervisor(state: AgentState) -> dict:
     with progressively refined queries (e.g. broad PPI → targeted lit search on a partner).
     """
     iteration = state.get("supervisor_iterations", 0)
+    allowed_steps, max_iterations, sandbox_directive = _sandbox_settings(state)
 
-    # Hard cap: always finalize after 8 iterations to prevent infinite loops
-    if iteration >= 8:
+    # Hard cap: always finalize after the configured limit to prevent infinite loops
+    if iteration >= max_iterations:
         return {
             "next_step":             "finalize",
             "supervisor_subquery":   "",
@@ -664,13 +718,14 @@ def node_supervisor(state: AgentState) -> dict:
             "progress":              80,
         }
 
-    # On the very first call (no context yet), always start with broad PPI
+    # On the very first call, prefer broad PPI if the sandbox allows it.
     context_entries = state.get("supervisor_context", [])
     if not context_entries:
+        first_step = "enrich_ppi" if "enrich_ppi" in allowed_steps else sorted(allowed_steps)[0]
         return {
-            "next_step":             "enrich_ppi",
+            "next_step":             first_step,
             "supervisor_subquery":   "",
-            "supervisor_reasoning":  "First pass: fetching PPI for all top genes.",
+            "supervisor_reasoning":  f"First pass: routing to {first_step}.",
             "supervisor_iterations": iteration + 1,
             "status":                "supervisor_routing",
             "progress":              35,
@@ -680,10 +735,16 @@ def node_supervisor(state: AgentState) -> dict:
     disease   = state.get("disease_term", "unknown disease")
     top_genes = state.get("top_genes", [])[:5]
     context   = _format_supervisor_context(state)
+    study_context = _format_study_context(state)
 
     prompt = f"""Disease under investigation: {disease}
 Top upregulated genes: {top_genes}
-Supervisor loop iteration: {iteration + 1} of 8 max
+Supervisor loop iteration: {iteration + 1} of {max_iterations} max
+Allowed specialist workers: {sorted(allowed_steps)}
+Sandbox directive: {sandbox_directive or "Use the default target-discovery strategy."}
+
+USER-PROVIDED STUDY CONTEXT:
+{study_context}
 
 INVESTIGATION HISTORY SO FAR:
 {context}
@@ -691,7 +752,10 @@ INVESTIGATION HISTORY SO FAR:
 Based on these findings, what should be investigated next?
 Remember the strategy: follow sparse literature with targeted partner-gene queries,
 check PPI partners for druggability when focal genes are undruggable, then finalize
-when you have substantive findings for all top genes."""
+when you have substantive findings for all top genes. If optional context names phenotypes,
+mutations, custom pathways, sample covariates, or study priorities, use it to choose focused
+follow-up queries and pruning decisions. You may only choose from the allowed specialist workers
+listed above, or choose finalize."""
 
     try:
         response = llm.invoke([
@@ -711,8 +775,7 @@ when you have substantive findings for all top genes."""
         reasoning   = f"Supervisor parse error ({e}) — finalizing."
         prune_genes = []
 
-    valid_steps = {"enrich_ppi", "literature_rag", "drug_annotation",
-                   "depmap_query", "opentargets_query", "finalize"}
+    valid_steps = allowed_steps | {"finalize"}
     if next_step not in valid_steps:
         next_step = "finalize"
 
@@ -843,7 +906,14 @@ def node_synthesize_hypotheses(state: AgentState) -> dict:
 
         try:
             prompt = _build_hypothesis_prompt(
-                gene, dge_entry, disease_term, sup_context, novelty_score, pub_count, key_pmids
+                gene,
+                dge_entry,
+                disease_term,
+                sup_context,
+                _format_study_context(state),
+                novelty_score,
+                pub_count,
+                key_pmids,
             )
             response = llm.invoke([
                 SystemMessage(content=_SYSTEM_PROMPT),
@@ -884,6 +954,7 @@ def _build_hypothesis_prompt(
     dge_entry: dict,
     disease_term: str,
     supervisor_context: str,
+    study_context: str,
     novelty_score: float,
     pub_count: int,
     key_pmids: list,
@@ -903,6 +974,11 @@ log2FC = {lfc}  |  padj = {padj}
 ## Novelty (pre-calculated — DO NOT change this value)
 novelty_score = {novelty_score}
 PubMed cancer hits: {pub_str}
+
+## User-Provided Study Context
+Use this only when it is relevant to {gene}. Do not force it into the brief.
+
+{study_context}
 
 ## Agent Network Investigation (primary evidence — this is the full picture; weight it heavily)
 The supervisor directed specialist agents across multiple rounds. All PPI network data,

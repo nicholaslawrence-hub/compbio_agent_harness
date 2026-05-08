@@ -55,6 +55,67 @@ def _parse_sample_conditions(raw: str) -> dict[str, str]:
     return result
 
 
+async def _read_optional_context_file(job_id: str, upload: UploadFile | None, key: str) -> dict | None:
+    if upload is None or not upload.filename:
+        return None
+
+    safe_name = Path(upload.filename).name
+    save_path = settings.raw_dir / f"{job_id}_{key}_{safe_name}"
+    content = await upload.read()
+    save_path.write_bytes(content)
+
+    preview = content[:4000].decode("utf-8", errors="replace")
+    return {
+        "filename": safe_name,
+        "path": str(save_path),
+        "preview": preview,
+    }
+
+
+def _base_initial_state(
+    disease_term: str,
+    condition_a: str,
+    condition_b: str,
+    count_matrix_path: str,
+    sample_conditions: dict[str, str],
+    study_context: dict | None = None,
+    sandbox_config: dict | None = None,
+) -> AgentState:
+    return {
+        "disease_term": disease_term,
+        "condition_a": condition_a,
+        "condition_b": condition_b,
+        "count_matrix_path": count_matrix_path,
+        "sample_conditions": sample_conditions,
+        "study_context": study_context or {},
+        "sandbox_config": sandbox_config or {},
+        "dge_results": [],
+        "all_dge_results": [],
+        "detected_genes": [],
+        "top_genes": [],
+        "enrichment_method": "",
+        "pathway_results": [],
+        "ppi_results": [],
+        "literature_results": [],
+        "drug_interactions": [],
+        "depmap_results": [],
+        "opentargets_results": [],
+        "hypotheses": [],
+        "final_report": None,
+        "errors": [],
+        "current_gene_index":    0,
+        "dge_attempt":           1,
+        "next_step":             "",
+        "supervisor_subquery":   "",
+        "supervisor_reasoning":  "",
+        "supervisor_iterations": 0,
+        "supervisor_context":    [],
+        "pruned_genes":          [],
+        "status":                "pending",
+        "progress":              0,
+    }
+
+
 async def _run_pipeline(job_id: str, state: AgentState):
     def _run_streaming():
         """Run the graph with stream() so each node's status/progress is reflected live."""
@@ -136,6 +197,11 @@ async def start_analysis(
     sample_conditions: str = Form(..., description='JSON or "sample:condition" pairs'),
     condition_a: str = Form("disease", description="Name of disease condition label"),
     condition_b: str = Form("control", description="Name of control condition label"),
+    sample_metadata: UploadFile | None = File(None, description="Optional sample metadata table"),
+    phenotype_table: UploadFile | None = File(None, description="Optional phenotype or outcome table"),
+    mutation_table: UploadFile | None = File(None, description="Optional mutation table"),
+    custom_gene_sets: UploadFile | None = File(None, description="Optional custom gene set file"),
+    study_notes: str = Form("", description="Optional study context notes"),
 ):
     job_id = str(uuid.uuid4())
 
@@ -144,38 +210,23 @@ async def start_analysis(
     save_path.write_bytes(content)
 
     conditions = _parse_sample_conditions(sample_conditions)
-
-    initial_state: AgentState = {
-        "disease_term": disease_term,
-        "condition_a": condition_a,
-        "condition_b": condition_b,
-        "count_matrix_path": str(save_path),
-        "sample_conditions": conditions,
-        "dge_results": [],
-        "all_dge_results": [],
-        "detected_genes": [],
-        "top_genes": [],
-        "enrichment_method": "",
-        "pathway_results": [],
-        "ppi_results": [],
-        "literature_results": [],
-        "drug_interactions": [],
-        "depmap_results": [],
-        "opentargets_results": [],
-        "hypotheses": [],
-        "final_report": None,
-        "errors": [],
-        "current_gene_index":    0,
-        "dge_attempt":           1,
-        "next_step":             "",
-        "supervisor_subquery":   "",
-        "supervisor_reasoning":  "",
-        "supervisor_iterations": 0,
-        "supervisor_context":    [],
-        "pruned_genes":          [],
-        "status":                "pending",
-        "progress":              0,
+    study_context = {
+        "sample_metadata": await _read_optional_context_file(job_id, sample_metadata, "sample_metadata"),
+        "phenotype_table": await _read_optional_context_file(job_id, phenotype_table, "phenotype_table"),
+        "mutation_table": await _read_optional_context_file(job_id, mutation_table, "mutation_table"),
+        "custom_gene_sets": await _read_optional_context_file(job_id, custom_gene_sets, "custom_gene_sets"),
+        "study_notes": study_notes.strip(),
     }
+    study_context = {k: v for k, v in study_context.items() if v}
+
+    initial_state = _base_initial_state(
+        disease_term=disease_term,
+        condition_a=condition_a,
+        condition_b=condition_b,
+        count_matrix_path=str(save_path),
+        sample_conditions=conditions,
+        study_context=study_context,
+    )
 
     _jobs[job_id] = {"status": "queued", "progress": 0, "result": None, "errors": []}
 
@@ -195,6 +246,110 @@ async def start_analysis(
 
     background_tasks.add_task(_run_pipeline, job_id, initial_state)
     return {"job_id": job_id, "message": "Analysis started"}
+
+
+@router.get("/sandbox/templates", summary="List configurable sandbox agent templates")
+async def sandbox_templates():
+    return {
+        "agents": [
+            {
+                "id": "enrich_ppi",
+                "label": "PPI Network",
+                "description": "STRING interactions and GO/Reactome partner annotation.",
+            },
+            {
+                "id": "depmap_query",
+                "label": "DepMap CRISPR",
+                "description": "Cancer dependency and essentiality evidence.",
+            },
+            {
+                "id": "opentargets_query",
+                "label": "OpenTargets",
+                "description": "Disease-gene association evidence and score decomposition.",
+            },
+            {
+                "id": "literature_rag",
+                "label": "Literature RAG",
+                "description": "PubMed and semantic literature retrieval with dark-gene handling.",
+            },
+            {
+                "id": "drug_annotation",
+                "label": "Drug Annotation",
+                "description": "UniProt structure/function and ChEMBL drug landscape.",
+            },
+        ],
+        "required_core": ["run_dge", "pathway_enrichment", "synthesize_hypotheses", "generate_report"],
+    }
+
+
+@router.post("/sandbox/run", summary="Run a constrained supervisor sandbox")
+async def start_sandbox_analysis(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    count_matrix: UploadFile = File(..., description="TSV/CSV count matrix (genes x samples)"),
+    disease_term: str = Form(..., description="Disease name, e.g. 'Glioblastoma'"),
+    sample_conditions: str = Form(..., description='JSON or "sample:condition" pairs'),
+    condition_a: str = Form("disease", description="Name of disease condition label"),
+    condition_b: str = Form("control", description="Name of control condition label"),
+    sandbox_config: str = Form(..., description="JSON supervisor sandbox configuration"),
+):
+    job_id = str(uuid.uuid4())
+
+    try:
+        config = json.loads(sandbox_config)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="sandbox_config must be valid JSON")
+
+    allowed = set(config.get("allowed_agents", []))
+    valid = {"enrich_ppi", "literature_rag", "drug_annotation", "depmap_query", "opentargets_query"}
+    config["allowed_agents"] = sorted(allowed & valid)
+    if not config["allowed_agents"]:
+        raise HTTPException(status_code=400, detail="Select at least one sandbox agent")
+
+    try:
+        config["max_iterations"] = max(1, min(8, int(config.get("max_iterations", 4))))
+    except (TypeError, ValueError):
+        config["max_iterations"] = 4
+
+    save_path = settings.raw_dir / f"{job_id}_{Path(count_matrix.filename).name}"
+    content = await count_matrix.read()
+    save_path.write_bytes(content)
+
+    conditions = _parse_sample_conditions(sample_conditions)
+    directive = str(config.get("directive", "")).strip()
+    study_context = {"study_notes": f"Sandbox directive: {directive}"} if directive else {}
+
+    initial_state = _base_initial_state(
+        disease_term=disease_term,
+        condition_a=condition_a,
+        condition_b=condition_b,
+        count_matrix_path=str(save_path),
+        sample_conditions=conditions,
+        study_context=study_context,
+        sandbox_config=config,
+    )
+
+    _jobs[job_id] = {
+        "status": "queued",
+        "progress": 0,
+        "result": None,
+        "errors": [],
+        "sandbox_config": config,
+    }
+
+    auth_header = request.headers.get("Authorization", "")
+    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else None
+    if user_id is not None:
+        try:
+            db = SessionLocal()
+            db.add(JobRecord(job_id=job_id, user_id=user_id, disease_term=f"[Sandbox] {disease_term}"))
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
+    background_tasks.add_task(_run_pipeline, job_id, initial_state)
+    return {"job_id": job_id, "message": "Sandbox analysis started"}
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatus)
