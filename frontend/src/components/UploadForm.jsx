@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useNavigate } from 'react-router-dom'
-import { FileSpreadsheet, AlertCircle, Trash2, X, FileText } from 'lucide-react'
+import { AlertCircle, Trash2, X } from 'lucide-react'
 import { startAnalysis } from '../utils/api.js'
 
 function parsePastedConditions(text) {
@@ -22,7 +22,7 @@ function parsePastedConditions(text) {
 }
 
 const LABEL = ({ children }) => (
-  <p className="text-sm uppercase tracking-wide text-white/60 mb-2">{children}</p>
+  <p className="bg-slate-800 px-2 py-1 text-xs font-bold text-slate-200 mb-2">{children}</p>
 )
 
 const OPTIONAL_INPUTS = [
@@ -54,7 +54,7 @@ export default function UploadForm() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/plain': ['.tsv', '.txt'], 'text/csv': ['.csv'] },
+    accept: { 'text/plain': ['.tsv'], 'text/csv': ['.csv'] },
     maxFiles: 1,
   })
 
@@ -151,26 +151,23 @@ export default function UploadForm() {
   const dotColor = (cond) => cond === conditionA ? 'bg-amber-400' : 'bg-blue-400'
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4">
 
       {/* ── Drop zone ─────────────────────────────────────────── */}
       <div>
         <LABEL>Count Matrix</LABEL>
         <div
           {...getRootProps()}
-          className={`relative rounded-xl cursor-pointer transition-all duration-200 overflow-hidden
-            ${isDragActive ? 'marching-ants bg-amber-400/5' : 'border border-dashed border-slate-700 hover:border-slate-500'}
+          className={`relative cursor-pointer transition-colors overflow-hidden
+            ${isDragActive ? 'bg-slate-900 border border-slate-400' : 'border border-dashed border-slate-600 bg-slate-950 hover:border-slate-300'}
           `}
           style={{ padding: isDragActive ? 0 : undefined }}
         >
           <input {...getInputProps()} />
 
           {file ? (
-            <div className="flex items-center justify-between px-4 py-4 glass-panel rounded-xl">
+            <div className="flex items-center justify-between border border-slate-700 bg-slate-950 px-3 py-2.5">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-amber-400/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet size={16} className="text-amber-400" />
-                </div>
                 <div>
                   <p className="text-sm font-medium text-white leading-tight">{file.name}</p>
                   <p className="text-xs text-white/40">{(file.size / 1024).toFixed(1)} KB</p>
@@ -185,15 +182,12 @@ export default function UploadForm() {
               </button>
             </div>
           ) : (
-            <div className={`flex items-center gap-4 px-5 py-5 ${isDragActive ? 'p-5' : ''}`}>
-              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                <FileSpreadsheet size={18} className="text-white/40" />
-              </div>
+            <div className={`px-3 py-3 ${isDragActive ? 'p-4' : ''}`}>
               <div>
                 <p className="text-sm font-medium text-white">
-                  {isDragActive ? 'Drop to upload' : 'Drop your file here or click to browse'}
+                  {isDragActive ? 'Drop file' : 'Drop or browse'}
                 </p>
-                <p className="text-xs text-white/40 mt-0.5">.tsv · .csv · .txt — rows = genes, cols = samples</p>
+                <p className="text-xs text-white/70 mt-0.5">.tsv · .csv</p>
               </div>
             </div>
           )}
@@ -204,7 +198,7 @@ export default function UploadForm() {
       <div>
         <LABEL>Disease / Study Context</LABEL>
         <input
-          className="glass-input w-full rounded-xl px-4 py-3 text-sm font-medium"
+          className="glass-input w-full rounded-none px-3 py-2.5 text-sm font-medium"
           placeholder="e.g. Glioblastoma, KRAS-mutant PDAC"
           value={disease}
           onChange={e => setDisease(e.target.value)}
@@ -214,26 +208,25 @@ export default function UploadForm() {
 
       {/* ── Sample conditions ─────────────────────────────────── */}
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
           <LABEL>Sample Conditions</LABEL>
           <div className="flex items-center gap-2 sm:mb-2">
             <button
               type="button"
               onClick={() => { setPasteMode(!pasteMode); setPasteError('') }}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-white/70 hover:text-white hover:border-slate-500 transition-colors"
+              className="border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:text-white hover:border-slate-500 transition-colors"
             >
               {pasteMode ? 'Manual entry' : 'Paste from sheet'}
             </button>
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 mb-3">
-          <p className="text-xs uppercase tracking-wide text-white/40 mb-2">Condition labels</p>
+        <div className="border border-slate-700 bg-slate-950 p-2 mb-2">
           <div className="grid grid-cols-[1fr_36px_1fr] gap-2 items-center">
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 pointer-events-none" />
               <input
-                className="glass-input w-full rounded-lg pl-7 pr-3 py-2.5 text-sm"
+                className="glass-input w-full rounded-none pl-7 pr-3 py-2 text-sm"
                 value={conditionA}
                 onChange={e => { setConditionA(e.target.value); setSamples(s => s.map(r => r.condition === conditionA ? { ...r, condition: e.target.value } : r)) }}
                 placeholder="case"
@@ -245,7 +238,7 @@ export default function UploadForm() {
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 pointer-events-none" />
               <input
-                className="glass-input w-full rounded-lg pl-7 pr-3 py-2.5 text-sm"
+                className="glass-input w-full rounded-none pl-7 pr-3 py-2 text-sm"
                 value={conditionB}
                 onChange={e => { setConditionB(e.target.value); setSamples(s => s.map(r => r.condition === conditionB ? { ...r, condition: e.target.value } : r)) }}
                 placeholder="control"
@@ -257,26 +250,26 @@ export default function UploadForm() {
         {pasteMode ? (
           <div className="space-y-2">
             <textarea
-              className="glass-input w-full rounded-xl px-4 py-3 text-xs h-32 resize-none"
+              className="glass-input w-full rounded-none px-3 py-2 text-xs h-28 resize-none"
               placeholder={"GBM_01\tdisease\nGBM_02\tdisease\nNRM_01\tcontrol\nNRM_02\tcontrol"}
               value={pasteText}
               onChange={e => setPasteText(e.target.value)}
             />
             {pasteError && <p className="text-xs text-red-400">{pasteError}</p>}
             <button type="button" onClick={applyPaste}
-              className="text-xs text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-400/10 transition-colors">
+              className="text-xs text-slate-200 border border-slate-700 px-3 py-1.5 hover:bg-slate-800 transition-colors">
               Apply
             </button>
           </div>
         ) : (
-          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+          <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
             {samples.map((s, i) => (
               <div key={i} className="flex gap-2 items-center group">
                 {/* Condition chip */}
                 <span className={`shrink-0 w-2 h-2 rounded-full transition-colors ${dotColor(s.condition)}`} />
 
                 <input
-                  className="glass-input flex-1 rounded-lg px-3 py-2 text-sm"
+                  className="glass-input flex-1 rounded-none px-3 py-2 text-sm"
                   placeholder={`sample_${i + 1}`}
                   value={s.name}
                   onChange={e => updateSample(i, 'name', e.target.value)}
@@ -288,11 +281,11 @@ export default function UploadForm() {
                   }}
                 />
 
-                <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-700 bg-slate-950/60 p-1 shrink-0">
+                <div className="grid grid-cols-2 gap-1 border border-slate-700 bg-slate-950/60 p-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => updateSample(i, 'condition', conditionA)}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                       s.condition === conditionA
                         ? 'bg-amber-400 text-slate-950'
                         : 'text-white/55 hover:text-white hover:bg-slate-800'
@@ -303,7 +296,7 @@ export default function UploadForm() {
                   <button
                     type="button"
                     onClick={() => updateSample(i, 'condition', conditionB)}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                       s.condition === conditionB
                         ? 'bg-blue-400 text-slate-950'
                         : 'text-white/55 hover:text-white hover:bg-slate-800'
@@ -326,23 +319,19 @@ export default function UploadForm() {
       </div>
 
       {/* Optional context */}
-      <div className="border-t border-slate-800 pt-6">
-        <div className="mb-4">
+      <div className="border-t border-slate-800 pt-4">
+        <div className="mb-2">
           <LABEL>Optional Context</LABEL>
-          <p className="text-sm text-white/70 leading-relaxed">
-            Add study files when they change target priority, cohort interpretation, or mechanism.
-          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="divide-y divide-slate-800 border border-slate-800">
           {OPTIONAL_INPUTS.map(({ key, label, accept, hint }) => {
             const selected = optionalFiles[key]
             return (
-              <div key={key} className="rounded-xl border border-slate-700 bg-slate-950/60 p-3">
-                <div className="flex items-start justify-between gap-3 mb-2">
+              <div key={key} className="grid gap-2 p-2 sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-center">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-white">{label}</p>
-                    <p className="text-xs text-white/45 mt-0.5">{hint}</p>
+                    <p className="text-xs font-semibold text-white">{label}</p>
                   </div>
                   {selected && (
                     <button
@@ -357,17 +346,14 @@ export default function UploadForm() {
                 </div>
 
                 {selected ? (
-                  <div className="flex items-center gap-3 rounded-lg bg-slate-900 border border-slate-700 px-3 py-3 min-h-16">
-                    <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                      <FileText size={15} className="text-white/70" />
-                    </div>
+                  <div className="flex items-center gap-3 bg-slate-950 border border-slate-700 px-2 py-2 min-h-10">
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-white truncate">{selected.name}</p>
                       <p className="text-[11px] text-white/40 mt-0.5">{(selected.size / 1024).toFixed(1)} KB</p>
                     </div>
                   </div>
                 ) : (
-                  <label className="flex min-h-16 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-700 hover:border-slate-500 bg-slate-900/40 px-3 py-3 transition-colors">
+                  <label className="flex min-h-10 cursor-pointer items-center justify-center border border-dashed border-slate-600 hover:border-slate-300 bg-slate-950 px-2 py-2 transition-colors">
                     <input
                       type="file"
                       accept={accept}
@@ -384,7 +370,7 @@ export default function UploadForm() {
 
         <div className="mt-3">
           <textarea
-            className="glass-input w-full rounded-xl px-4 py-3 text-sm min-h-28 resize-y"
+            className="glass-input w-full rounded-none px-3 py-2 text-sm min-h-24 resize-y"
             placeholder="Study notes: model system, treatment, subtype, response label, target class to prefer"
             value={studyNotes}
             onChange={e => setStudyNotes(e.target.value)}
@@ -403,8 +389,7 @@ export default function UploadForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-4 rounded-xl font-bold text-base text-slate-900 bg-amber-400 hover:bg-amber-300 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed tracking-tight"
-        style={{ boxShadow: loading ? 'none' : '0 0 24px rgba(251,191,36,0.25)' }}
+        className="w-full py-3 font-bold text-sm text-slate-900 bg-amber-400 hover:bg-amber-300 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed tracking-tight"
       >
         {loading ? 'Launching agent network…' : 'Run Analysis →'}
       </button>
@@ -413,7 +398,7 @@ export default function UploadForm() {
         type="button"
         onClick={inputSampleData}
         disabled={loading || sampleLoading}
-        className="w-full py-3 rounded-xl font-semibold text-sm text-amber-300 border border-amber-500/30 bg-amber-400/5 hover:bg-amber-400/10 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full py-2.5 font-semibold text-xs text-slate-200 border border-slate-700 bg-slate-900 hover:bg-slate-800 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {sampleLoading ? 'Loading sample data…' : 'Input sample data'}
       </button>

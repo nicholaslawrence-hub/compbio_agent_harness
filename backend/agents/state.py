@@ -77,6 +77,15 @@ class TherapeuticHypothesis(TypedDict):
     pub_count: int
 
 
+class ArtifactPointer(TypedDict):
+    artifact_id: str
+    uri: str
+    kind: str
+    summary: str
+    bytes: Optional[int]
+    metadata: dict[str, Any]
+
+
 class AgentState(TypedDict):
     # ── Input ────────────────────────────────────────────────────────────────
     disease_term: str
@@ -86,6 +95,16 @@ class AgentState(TypedDict):
     sample_conditions: dict[str, str]
     study_context: dict[str, Any]
     sandbox_config: dict[str, Any]
+    network_topology: dict[str, Any]
+    artifact_registry: dict[str, ArtifactPointer]
+    node_outputs: dict[str, dict[str, Any]]
+    node_status: dict[str, str]
+    pending_tasks: dict[str, dict[str, Any]]
+    approval_requests: dict[str, dict[str, Any]]
+    provenance_ledger: Annotated[list[dict], operator.add]
+    edge_decisions: dict[str, str]
+    external_results: dict[str, dict[str, Any]]
+    active_node_id: str
 
     # ── Intermediate results ─────────────────────────────────────────────────
     dge_results: list[DGEResult]        # top upregulated (filtered)
@@ -99,6 +118,22 @@ class AgentState(TypedDict):
     drug_interactions: list[DrugInteraction]
     depmap_results: list[DepmapResult]
     opentargets_results: list[OTResult]
+    clinical_trials_results: list[dict[str, Any]]
+    pathway_crosstalk_results: list[dict[str, Any]]
+    evo2_fitness_results: list[dict[str, Any]]
+    esm3_design_results: list[dict[str, Any]]
+    scenic_regulon_results: list[dict[str, Any]]
+    spatial_tme_results: list[dict[str, Any]]
+    lincs_reversion_results: list[dict[str, Any]]
+    tcga_survival_results: list[dict[str, Any]]
+    pharmacogenomics_pgx_results: list[dict[str, Any]]
+    crispr_design_results: list[dict[str, Any]]
+    alphafold_complex_results: list[dict[str, Any]]
+    viper_protein_activity_results: list[dict[str, Any]]
+    mageck_crispr_results: list[dict[str, Any]]
+    reinvent_generative_results: list[dict[str, Any]]
+    gnina_docking_results: list[dict[str, Any]]
+    rdkit_feature_results: list[dict[str, Any]]
 
     # ── Output ───────────────────────────────────────────────────────────────
     hypotheses: Annotated[list[TherapeuticHypothesis], operator.add]
@@ -109,12 +144,21 @@ class AgentState(TypedDict):
     dge_attempt: int                    # 1 = standard, 2 = lenient re-run
 
     # ── Supervisor control flow ──────────────────────────────────────────────
-    next_step: str                      # where supervisor routes next
+    next_step: str                      # next step for the supervisor, based off context
     supervisor_subquery: str            # targeted query/gene for the next node
     supervisor_reasoning: str           # one-sentence explanation of decision
-    supervisor_iterations: int          # loop guard — hard-capped at 8
-    supervisor_context: Annotated[list[dict], operator.add]   # per-step finding summaries
+    supervisor_iterations: int          
+    supervisor_context: Annotated[list[dict], operator.add]   
     pruned_genes: list[str]             # genes dropped by supervisor as dead ends
+    routing_history: Annotated[list[dict], operator.add]
+    prompt_payloads: Annotated[list[dict], operator.add]
+    execution_events: Annotated[list[dict], operator.add]
+    critic_feedback: Annotated[list[dict], operator.add]
+    critic_retries: dict[str, int]
+    retry_counts: dict[str, int]
+    critic_route: str
+    flow_killed: bool
+    previous_node_id: str
 
     # ── Progress ─────────────────────────────────────────────────────────────
     current_gene_index: int

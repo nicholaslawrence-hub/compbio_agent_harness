@@ -2,8 +2,8 @@
 import { useParams, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { ChevronLeft, Download, RefreshCw } from 'lucide-react'
-import { getJobStatus, streamJobProgress } from '../utils/api.js'
-import ProgressBar from '../components/ProgressBar.jsx'
+import { getJobStatus, getNetworkState, resolveApproval, streamJobProgress } from '../utils/api.js'
+import NetworkExecutionVisualizer from '../components/NetworkExecutionVisualizer.jsx'
 import HypothesisCard from '../components/HypothesisCard.jsx'
 import DGETable from '../components/DGETable.jsx'
 import VolcanoPlot from '../components/VolcanoPlot.jsx'
@@ -104,11 +104,31 @@ export default function ResultsPage() {
   const [tab, setTab] = useState('Hypotheses')
   const [error, setError] = useState('')
   const [supervisorLog, setSupervisorLog] = useState([])
+  const [executionEvents, setExecutionEvents] = useState([])
+  const [promptPayloads, setPromptPayloads] = useState([])
+  const [networkTopology, setNetworkTopology] = useState(null)
+  const [checkpoint, setCheckpoint] = useState(null)
+  const [approvalBusy, setApprovalBusy] = useState('')
   const [newLogIdx, setNewLogIdx] = useState(-1)
   const agentLogRef = useRef(null)
 
   useEffect(() => {
-    getJobStatus(jobId).then(setJob).catch(e => setError(e.message))
+    getNetworkState(jobId)
+      .then(data => {
+        setCheckpoint(data.checkpoint)
+        if (data.checkpoint?.network_topology) setNetworkTopology(data.checkpoint.network_topology)
+        if (data.checkpoint?.execution_events?.length) setExecutionEvents(data.checkpoint.execution_events)
+        if (data.checkpoint?.prompt_payloads?.length) setPromptPayloads(data.checkpoint.prompt_payloads)
+      })
+      .catch(() => {})
+    getJobStatus(jobId)
+      .then(data => {
+        setJob(data)
+        if (data.network_topology) setNetworkTopology(data.network_topology)
+        if (data.execution_events?.length) setExecutionEvents(data.execution_events)
+        if (data.prompt_payloads?.length) setPromptPayloads(data.prompt_payloads)
+      })
+      .catch(e => setError(e.message))
     const stop = streamJobProgress(
       jobId,
       (data) => {
@@ -123,6 +143,17 @@ export default function ResultsPage() {
             return incoming
           })
         }
+        if (data.execution_events?.length) setExecutionEvents(data.execution_events)
+        if (data.prompt_payloads?.length) setPromptPayloads(data.prompt_payloads)
+        if (data.network_topology) setNetworkTopology(data.network_topology)
+        setCheckpoint(prev => ({
+          ...(prev || {}),
+          node_outputs: data.node_outputs || prev?.node_outputs || {},
+          artifact_registry: data.artifact_registry || prev?.artifact_registry || {},
+          pending_tasks: data.pending_tasks || prev?.pending_tasks || {},
+          approval_requests: data.approval_requests || prev?.approval_requests || {},
+          provenance_ledger: data.provenance_ledger || prev?.provenance_ledger || [],
+        }))
       },
       (data) => {
         setJob(prev => ({ ...prev, ...data }))
@@ -183,6 +214,19 @@ export default function ResultsPage() {
 
   const currentLogs = STEP_LOGS[job?.status] ?? []
   const visibleTerminalLines = currentLogs.slice(0, logLineIdx + 1).slice(-4)
+  const approvalRequests = Object.entries(checkpoint?.approval_requests || {})
+    .filter(([, request]) => request?.status === 'awaiting_user_approval' || request?.decision)
+
+  const handleApproval = async (nodeId, decision) => {
+    setApprovalBusy(`${nodeId}:${decision}`)
+    try {
+      const res = await resolveApproval(jobId, nodeId, decision)
+      setCheckpoint(res.checkpoint)
+      setJob((prev) => ({ ...(prev || {}), status: 'queued' }))
+    } finally {
+      setApprovalBusy('')
+    }
+  }
 
   const downloadReport = () => {
     const blob = new Blob([report], { type: 'text/markdown' })
@@ -228,8 +272,67 @@ export default function ResultsPage() {
             )}
           </div>
 
-          {/* Shimmer bar + phase dots */}
-          <ProgressBar progress={job?.progress ?? 0} status={job?.status} />
+          <NetworkExecutionVisualizer
+            progress={job?.progress ?? 0}
+            status={job?.status}
+            topology={networkTopology || job?.network_topology}
+            executionEvents={executionEvents}
+            promptPayloads={promptPayloads}
+          />
+
+          {approvalRequests.length > 0 && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-950/20 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-amber-200 mb-3">Approval Gates</p>
+              <div className="space-y-3">
+                {approvalRequests.map(([nodeId, request]) => (
+                  <div key={nodeId} className="flex flex-col gap-3 rounded-md border border-slate-700 bg-slate-950/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{nodeId}</p>
+                      <p className="text-xs text-slate-300">{request.summary || 'Supervisor paused for human review.'}</p>
+                      {request.decision && <p className="mt-1 text-xs text-amber-200">Decision: {request.decision}</p>}
+                    </div>
+                    {!request.decision && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleApproval(nodeId, 'approved')}
+                          disabled={approvalBusy !== ''}
+                          className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproval(nodeId, 'rejected')}
+                          disabled={approvalBusy !== ''}
+                          className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-2 text-xs font-bold text-rose-100 hover:bg-rose-500/25 disabled:opacity-50"
+                        >
+                          Reject & Reroute
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {checkpoint && (
+            <div className="grid gap-3 lg:grid-cols-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-950 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Artifacts</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-300">{JSON.stringify(checkpoint.artifact_registry || {}, null, 2)}</pre>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Pending Work</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-300">{JSON.stringify(checkpoint.pending_tasks || {}, null, 2)}</pre>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Provenance Ledger</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-300">{JSON.stringify((checkpoint.provenance_ledger || []).slice(-3), null, 2)}</pre>
+              </div>
+            </div>
+          )}
 
           {/* Mini-terminal */}
           {visibleTerminalLines.length > 0 && (

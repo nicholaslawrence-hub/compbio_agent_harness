@@ -26,7 +26,6 @@ const EDGES = [
   ['supervisor','rag'], ['supervisor','drug'],
   ['supervisor','synthesis'], ['supervisor','report'],
   // cross-cluster semantic
-  ['dge','pathway'],
   ['ppi','depmap'],
   ['opentargets','synthesis'],
   ['rag','synthesis'],

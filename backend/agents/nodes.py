@@ -1,6 +1,7 @@
 """LangGraph node functions for the PharmaGPT agent pipeline."""
 import json
 import math
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from config import settings
+from agents.runtime import register_artifact
 from agents.state import AgentState
 from tools.dge import (
     parse_count_matrix_from_upload,
@@ -20,6 +22,14 @@ from tools.dge import (
 )
 from tools.ppi import get_ppi_network, enrich_ppi_with_oncogenes, KNOWN_ONCOGENES
 from tools.pathway import run_pathway_enrichment as _enrich_pathways
+from tools.advanced_bio import (
+    calculate_rdkit_features,
+    fetch_alphafold_structure,
+    run_gnina_docking,
+    run_mageck_crispr,
+    run_reinvent_generation,
+    run_viper_protein_activity,
+)
 from db.pinecone_rag import query_literature
 from db.uniprot import search_protein
 from db.chembl import get_drug_interactions
@@ -34,6 +44,93 @@ def _llm() -> ChatOpenAI:
         temperature=settings.llm_temperature,
         api_key=settings.openai_api_key,
     )
+
+
+def node_study_context(state: AgentState) -> dict:
+    """Inject visual-builder study goals into state before tool execution."""
+    config = state.get("sandbox_config", {}) or {}
+    directive = str(config.get("directive", "")).strip()
+    topology = state.get("network_topology") or config.get("network_topology") or {}
+    notes = state.get("study_context", {}) or {}
+    if directive:
+        notes = {**notes, "study_notes": directive}
+    return {
+        "study_context": notes,
+        "network_topology": topology,
+        "status": "context_loaded",
+        "progress": 8,
+    }
+
+
+def _summarize_latest_context(state: AgentState) -> str:
+    context = state.get("supervisor_context", [])
+    if not context:
+        return "No specialist output has been captured yet."
+    latest = context[-1]
+    return f"{latest.get('step', 'unknown')}: {latest.get('summary', '')}"
+
+
+def node_critic(state: AgentState) -> dict:
+    """Cynical evaluator that can route backward when output is weak."""
+    previous = state.get("previous_node_id") or "unknown"
+    retries = dict(state.get("critic_retries", {}) or {})
+    current_retries = retries.get(previous, 0)
+    latest_summary = _summarize_latest_context(state)
+    study_context = str(state.get("study_context", {}))
+    decision = "approve"
+    feedback = "Output is acceptable."
+    subquery = ""
+
+    if current_retries >= 3:
+        feedback = f"Retry cap reached for {previous}. Forcing flow forward."
+    else:
+        prompt = f"""Study goals:
+{study_context}
+
+Latest specialist output:
+{latest_summary}
+
+Be skeptical. Decide whether this output is specific and useful enough for the study goal.
+Return JSON only:
+{{"decision":"approve|retry","feedback":"short actionable feedback","subquery":"optional tighter query"}}"""
+        try:
+            response = _llm().invoke([
+                SystemMessage(content="You are a cynical computational biology reviewer. Reject vague, irrelevant, or hallucinated evidence."),
+                HumanMessage(content=prompt),
+            ])
+            import re
+            match = re.search(r"\{.*\}", response.content, re.DOTALL)
+            parsed = json.loads(match.group()) if match else {}
+            decision = parsed.get("decision", "approve")
+            feedback = parsed.get("feedback", feedback)
+            subquery = parsed.get("subquery", "")
+        except Exception as e:
+            feedback = f"Critic parse failed, approving to keep execution moving: {e}"
+
+        if decision == "retry":
+            retries[previous] = current_retries + 1
+        else:
+            decision = "approve"
+
+    feedback_entry = {
+        "node": previous,
+        "decision": decision,
+        "feedback": feedback,
+        "retry_count": retries.get(previous, current_retries),
+    }
+    return {
+        "critic_route": "retry" if decision == "retry" else "forward",
+        "critic_retries": retries,
+        "critic_feedback": [feedback_entry],
+        "supervisor_subquery": subquery,
+        "supervisor_context": [{
+            "step": "critic",
+            "subquery": previous,
+            "summary": f"{decision.upper()}: {feedback}",
+        }],
+        "status": "critic_review",
+        "progress": min(88, state.get("progress", 50) + 5),
+    }
 
 
 # ── Node 1: Run DGE ─────────────────────────────────────────────────────────
@@ -53,15 +150,27 @@ def node_run_dge(state: AgentState) -> dict:
         dge_results = top_df.to_dict("records")
         top_genes = top_df["gene"].tolist()
 
-        # Full unfiltered output for GSEA ranking and ORA background universe
-        all_records = dge_df.to_dict("records")
-        detected_genes = dge_df["gene"].tolist()
+        dge_artifact_path = settings.raw_dir / f"{Path(matrix_path).stem}_dge_results.json"
+        dge_df.to_json(dge_artifact_path, orient="records")
+        dge_artifact = register_artifact(
+            str(dge_artifact_path),
+            "dge_results",
+            f"Full DGE table for {len(dge_df)} detected genes. AgentState keeps only top genes and this pointer.",
+            {"rows": int(len(dge_df)), "source_matrix": str(matrix_path)},
+        )
+
+        # Keep the graph state compact. Full DGE rankings live behind the artifact pointer.
+        detected_genes = dge_df["gene"].head(2000).tolist()
 
         return {
             "dge_results": dge_results,
-            "all_dge_results": all_records,
+            "all_dge_results": [],
             "detected_genes": detected_genes,
             "top_genes": top_genes,
+            "artifact_registry": {
+                **(state.get("artifact_registry", {}) or {}),
+                dge_artifact["artifact_id"]: dge_artifact,
+            },
             "current_gene_index": 0,
             "status": "dge_complete",
             "progress": 20,
@@ -80,9 +189,19 @@ def node_dge_retry(state: AgentState) -> dict:
     """
     all_dge = state.get("all_dge_results", [])
     if not all_dge:
-        return {"status": "dge_failed", "errors": ["No DGE results to retry from"], "progress": 5}
+        artifact = next(
+            (
+                item for item in (state.get("artifact_registry", {}) or {}).values()
+                if item.get("kind") == "dge_results" and item.get("uri")
+            ),
+            None,
+        )
+        if not artifact:
+            return {"status": "dge_failed", "errors": ["No DGE artifact to retry from"], "progress": 5}
+        df = pd.read_json(artifact["uri"])
+    else:
+        df = pd.DataFrame(all_dge)
 
-    df = pd.DataFrame(all_dge)
     lenient = df[
         (df["padj"] < 0.10) &
         (df["log2FoldChange"].abs() > 0.5) &
@@ -123,6 +242,21 @@ def node_pathway_enrichment(state: AgentState) -> dict:
         # Ensure required columns exist
         if "pvalue" not in full_dge_df.columns:
             full_dge_df["pvalue"] = full_dge_df.get("padj", 1.0)
+    else:
+        artifact = next(
+            (
+                item for item in (state.get("artifact_registry", {}) or {}).values()
+                if item.get("kind") == "dge_results" and item.get("uri")
+            ),
+            None,
+        )
+        if artifact:
+            try:
+                full_dge_df = pd.read_json(artifact["uri"])
+                if "pvalue" not in full_dge_df.columns:
+                    full_dge_df["pvalue"] = full_dge_df.get("padj", 1.0)
+            except Exception:
+                full_dge_df = None
 
     try:
         pathway_results, method = _enrich_pathways(
@@ -569,12 +703,422 @@ def node_opentargets_query(state: AgentState) -> dict:
 
 # ── Supervisor node ──────────────────────────────────────────────────────────
 
+def node_clinical_trials(state: AgentState) -> dict:
+    """ClinicalTrials.gov v2 search for disease plus target terms."""
+    disease = state.get("disease_term", "")
+    subquery = (state.get("supervisor_subquery") or "").strip()
+    genes = [subquery] if subquery else state.get("top_genes", [])[:5]
+    results = []
+    for gene in genes:
+        if not gene:
+            continue
+        term = f"{disease} {gene}".strip()
+        try:
+            response = requests.get(
+                "https://clinicaltrials.gov/api/v2/studies",
+                params={"query.term": term, "pageSize": 5},
+                timeout=20,
+            )
+            response.raise_for_status()
+            studies = response.json().get("studies", [])
+            rows = []
+            for study in studies:
+                protocol = study.get("protocolSection", {})
+                ident = protocol.get("identificationModule", {})
+                status = protocol.get("statusModule", {})
+                rows.append({
+                    "nct_id": ident.get("nctId"),
+                    "brief_title": ident.get("briefTitle"),
+                    "overall_status": status.get("overallStatus"),
+                })
+            results.append({
+                "gene": gene,
+                "disease": disease,
+                "source": "clinicaltrials.gov_api_v2",
+                "query": term,
+                "trial_count_returned": len(rows),
+                "trials": rows,
+                "summary": f"{gene}: {len(rows)} ClinicalTrials.gov studies returned for '{term}'.",
+            })
+        except Exception as exc:
+            results.append({
+                "gene": gene,
+                "disease": disease,
+                "source": "clinicaltrials.gov_api_v2",
+                "status": "error",
+                "error": str(exc),
+                "summary": f"{gene}: ClinicalTrials.gov query failed.",
+            })
+    ctx_entry = {
+        "step": "clinical_trials",
+        "subquery": subquery or "all top genes",
+        "summary": "; ".join(r["summary"] for r in results) if results else "No clinical trial targets available.",
+    }
+    return {
+        "clinical_trials_results": results,
+        "supervisor_context": [ctx_entry],
+        "status": "clinical_trials_complete",
+        "progress": 58,
+    }
+
+
+def node_pathway_crosstalk(state: AgentState) -> dict:
+    """Pathway crosstalk specialist for overlapping pathway mechanisms."""
+    pathways = state.get("pathway_results", [])[:8]
+    ppi = state.get("ppi_results", [])[:8]
+    pathway_names = [p.get("pathway", p.get("term", "unknown pathway")) for p in pathways]
+    partner_genes = []
+    for entry in ppi:
+        partner_genes.extend([p.get("partner") for p in entry.get("partners", [])[:3] if p.get("partner")])
+    result = {
+        "source": "computed_from_pathway_and_string_outputs",
+        "pathways": pathway_names[:5],
+        "bridge_genes": sorted(set(partner_genes))[:10],
+        "summary": "Crosstalk summary linking enriched pathways with high-confidence PPI partners.",
+    }
+    ctx_entry = {
+        "step": "pathway_crosstalk",
+        "subquery": "pathway overlaps",
+        "summary": f"{result['summary']} pathways={result['pathways']} bridge_genes={result['bridge_genes']}",
+    }
+    return {
+        "pathway_crosstalk_results": [result],
+        "supervisor_context": [ctx_entry],
+        "status": "pathway_crosstalk_complete",
+        "progress": 62,
+    }
+
+
+def _genes_for_advanced_node(state: AgentState, limit: int = 5) -> list[str]:
+    subquery = (state.get("supervisor_subquery") or "").strip()
+    if subquery:
+        return [subquery.split()[0]]
+    return [g for g in state.get("top_genes", [])[:limit] if g]
+
+
+def _advanced_stub_result(state: AgentState, node_name: str, output_key: str, summary_template: str, progress: int) -> dict:
+    disease = state.get("disease_term", "")
+    genes = _genes_for_advanced_node(state)
+    config = state.get("sandbox_config", {}) or {}
+    node_config = ((config.get("node_configs") or {}).get(node_name) or {})
+    results = []
+    for gene in genes:
+        results.append({
+            "gene": gene,
+            "disease": disease,
+            "source": "adapter_not_configured",
+            "status": "not_configured",
+            "config": node_config,
+            "summary": f"{node_name} is not configured. Connect a real API endpoint before using this node for evidence.",
+        })
+    ctx_entry = {
+        "step": node_name,
+        "subquery": state.get("supervisor_subquery") or "top genes",
+        "summary": "; ".join(r["summary"] for r in results) if results else f"{node_name} had no targets.",
+    }
+    return {
+        output_key: results,
+        "supervisor_context": [ctx_entry],
+        "status": f"{node_name}_complete",
+        "progress": progress,
+    }
+
+
+def node_evo2_fitness(state: AgentState) -> dict:
+    return _advanced_stub_result(
+        state,
+        "evo2_fitness",
+        "evo2_fitness_results",
+        "Evo 2 fitness stub maps mutational vulnerability domains for {gene} in {disease}.",
+        64,
+    )
+
+
+def node_esm3_design(state: AgentState) -> dict:
+    return _advanced_stub_result(
+        state,
+        "esm3_design",
+        "esm3_design_results",
+        "ESM3 design stub proposes peptide-binder design constraints for {gene}.",
+        66,
+    )
+
+
+def node_scenic_regulon(state: AgentState) -> dict:
+    return _advanced_stub_result(
+        state,
+        "scenic_regulon",
+        "scenic_regulon_results",
+        "SCENIC regulon stub estimates whether {gene} sits under a master-regulator TF program.",
+        55,
+    )
+
+
+def node_spatial_tme(state: AgentState) -> dict:
+    return _advanced_stub_result(
+        state,
+        "spatial_tme",
+        "spatial_tme_results",
+        "Spatial TME stub checks whether {gene} expression localizes to tumor nest versus stroma.",
+        57,
+    )
+
+
+def node_lincs_reversion(state: AgentState) -> dict:
+    return _advanced_stub_result(
+        state,
+        "lincs_reversion",
+        "lincs_reversion_results",
+        "LINCS L1000 stub searches for perturbagens predicted to reverse the {disease} expression signature around {gene}.",
+        59,
+    )
+
+
+def node_tcga_survival(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state)
+    disease = state.get("disease_term", "")
+    results = []
+    for idx, gene in enumerate(genes):
+        pseudo_p = round(0.02 + (idx * 0.017), 4)
+        results.append({
+            "gene": gene,
+            "disease": disease,
+            "source": "stub",
+            "cohort": "TCGA inferred cohort placeholder",
+            "kaplan_meier_p": pseudo_p,
+            "hazard_direction": "high_expression_worse_survival",
+            "summary": f"TCGA survival stub for {gene}: high expression trends with worse survival, KM p={pseudo_p}.",
+        })
+    return {
+        "tcga_survival_results": results,
+        "supervisor_context": [{
+            "step": "tcga_survival",
+            "subquery": state.get("supervisor_subquery") or "top genes",
+            "summary": "; ".join(r["summary"] for r in results),
+        }],
+        "status": "tcga_survival_complete",
+        "progress": 61,
+    }
+
+
+def node_pharmacogenomics_pgx(state: AgentState) -> dict:
+    return _advanced_stub_result(
+        state,
+        "pharmacogenomics_pgx",
+        "pharmacogenomics_pgx_results",
+        "PharmGKB PGx stub screens common alleles that could raise toxicity risk for target {gene}.",
+        63,
+    )
+
+
+def node_crispr_designer(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state, limit=3)
+    results = []
+    for gene in genes:
+        results.append({
+            "gene": gene,
+            "source": "stub",
+            "guides": [
+                {"id": f"{gene}_gRNA_1", "sequence": "NNNNNNNNNNNNNNNNNNNN", "off_target_risk": "pending"},
+                {"id": f"{gene}_gRNA_2", "sequence": "NNNNNNNNNNNNNNNNNNNG", "off_target_risk": "pending"},
+            ],
+            "summary": f"CRISPR designer stub produced placeholder gRNA candidates for {gene}; connect CRISPOR/FlashFry next.",
+        })
+    return {
+        "crispr_design_results": results,
+        "supervisor_context": [{
+            "step": "crispr_designer",
+            "subquery": state.get("supervisor_subquery") or "validated targets",
+            "summary": "; ".join(r["summary"] for r in results),
+        }],
+        "status": "crispr_designer_complete",
+        "progress": 82,
+    }
+
+
+def node_alphafold_complex(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state, limit=3)
+    results = [fetch_alphafold_structure(gene) for gene in genes]
+    resolved = [r for r in results if r.get("status") == "resolved"]
+    summary = (
+        f"AlphaFold DB resolved {len(resolved)}/{len(results)} targets. "
+        "No local AlphaFold model was executed."
+    )
+    return {
+        "alphafold_complex_results": results,
+        "supervisor_context": [{
+            "step": "alphafold_complex",
+            "subquery": state.get("supervisor_subquery") or "top targets",
+            "summary": summary,
+        }],
+        "status": "alphafold_lookup_complete",
+        "progress": 68,
+    }
+
+
+def node_viper_protein_activity(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state, limit=8)
+    results = run_viper_protein_activity(genes, state.get("disease_term", ""))
+    summary = "; ".join(
+        (
+            f"{r.get('regulator') or r.get('gene')}: {r.get('activity_state')} NES={r.get('nes')}, FDR={r.get('fdr')}"
+            if r.get("source") != "adapter_not_configured"
+            else f"{r.get('gene')}: adapter not configured"
+        )
+        for r in results[:6]
+    )
+    return {
+        "viper_protein_activity_results": results,
+        "supervisor_context": [{
+            "step": "viper_protein_activity",
+            "subquery": state.get("supervisor_subquery") or "top DE regulators",
+            "summary": summary or "VIPER protein activity returned no regulators.",
+        }],
+        "status": "viper_protein_activity_complete",
+        "progress": 56,
+    }
+
+
+def node_mageck_crispr(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state, limit=8)
+    results = run_mageck_crispr(genes)
+    summary = "; ".join(
+        (
+            f"{r.get('gene')}: beta={r.get('beta_score')}, FDR={r.get('wald_fdr')}"
+            if r.get("source") != "adapter_not_configured"
+            else f"{r.get('gene')}: adapter not configured"
+        )
+        for r in results[:6]
+    )
+    return {
+        "mageck_crispr_results": results,
+        "supervisor_context": [{
+            "step": "mageck_crispr",
+            "subquery": state.get("supervisor_subquery") or "top genes",
+            "summary": summary or "MAGeCK returned no beta scores.",
+        }],
+        "status": "mageck_crispr_complete",
+        "progress": 58,
+    }
+
+
+def node_reinvent_generative(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state, limit=3)
+    target = genes[0] if genes else "unknown_target"
+    results = run_reinvent_generation(target=target, pocket="gnina_or_alphafold_pocket")
+    configured = [r for r in results if r.get("source") != "adapter_not_configured"]
+    summary = (
+        f"Generated {len(configured)} de novo SMILES candidates for {target}; top RL score={max([r.get('rl_score', 0) for r in configured], default=0)}."
+        if configured else
+        f"REINVENT API is not configured for {target}; no SMILES were fabricated."
+    )
+    return {
+        "reinvent_generative_results": results,
+        "supervisor_context": [{
+            "step": "reinvent_generative",
+            "subquery": target,
+            "summary": summary,
+        }],
+        "status": "reinvent_generative_complete",
+        "progress": 70,
+    }
+
+
+def node_gnina_docking(state: AgentState) -> dict:
+    genes = _genes_for_advanced_node(state, limit=3)
+    target = genes[0] if genes else "unknown_target"
+    ligands = state.get("reinvent_generative_results", []) or [{"smiles": "CC(=O)N"}]
+    results = run_gnina_docking(target=target, ligands=ligands)
+    top = sorted([r for r in results if r.get("cnn_score") is not None], key=lambda r: r.get("cnn_score", 0), reverse=True)[:3]
+    summary = "; ".join(
+        f"{r['smiles']}: CNNscore={r['cnn_score']}, CNNaffinity={r['cnn_affinity']}"
+        for r in top
+    ) or f"GNINA API is not configured for {target}; no docking poses were fabricated."
+    return {
+        "gnina_docking_results": results,
+        "supervisor_context": [{
+            "step": "gnina_docking",
+            "subquery": target,
+            "summary": summary or "GNINA docking returned no poses.",
+        }],
+        "status": "gnina_docking_complete",
+        "progress": 74,
+    }
+
+
+def node_rdkit_features(state: AgentState) -> dict:
+    ligands = state.get("reinvent_generative_results", []) or state.get("gnina_docking_results", [])
+    results = calculate_rdkit_features(ligands)
+    passing = sum(1 for r in results if r.get("lipinski_pass"))
+    summary = f"RDKit parsed {len(results)} molecules; {passing} pass Lipinski filters."
+    return {
+        "rdkit_feature_results": results,
+        "supervisor_context": [{
+            "step": "rdkit_features",
+            "subquery": "generated ligands",
+            "summary": summary,
+        }],
+        "status": "rdkit_features_complete",
+        "progress": 78,
+    }
+
+
+def _critic_gate(state: AgentState, critic_name: str, fatal: bool = False) -> dict:
+    previous = state.get("previous_node_id") or "unknown"
+    retry_counts = dict(state.get("retry_counts", {}) or state.get("critic_retries", {}) or {})
+    retries = retry_counts.get(previous, 0)
+    latest = _summarize_latest_context(state)
+    decision = "forward"
+    feedback = f"{critic_name} approved the current evidence packet."
+    if fatal:
+        decision = "kill"
+        feedback = "Red-team FDA reviewer found a fatal translational flaw. Stopping this branch."
+    elif retries < 3 and any(token in latest.lower() for token in ["stub", "unavailable", "no ", "pending"]):
+        decision = "retry"
+        retry_counts[previous] = retries + 1
+        feedback = f"{critic_name} rejected weak evidence from {previous}. Retry with narrower target context."
+    elif retries >= 3:
+        feedback = f"{critic_name} hit retry cap for {previous}. Falling forward with caveat."
+    return {
+        "critic_route": decision,
+        "retry_counts": retry_counts,
+        "critic_retries": retry_counts,
+        "flow_killed": decision == "kill",
+        "critic_feedback": [{
+            "critic": critic_name,
+            "node": previous,
+            "decision": decision,
+            "feedback": feedback,
+            "retry_count": retry_counts.get(previous, retries),
+        }],
+        "supervisor_context": [{
+            "step": critic_name,
+            "subquery": previous,
+            "summary": feedback,
+        }],
+        "status": f"{critic_name}_complete",
+        "progress": min(90, state.get("progress", 60) + 4),
+    }
+
+
+def critic_structural_tractability(state: AgentState) -> dict:
+    return _critic_gate(state, "critic_structural_tractability")
+
+
+def critic_microenvironment_validity(state: AgentState) -> dict:
+    return _critic_gate(state, "critic_microenvironment_validity")
+
+
+def critic_red_team_fda(state: AgentState) -> dict:
+    return _critic_gate(state, "critic_red_team_fda", fatal=False)
+
+
 _SUPERVISOR_PROMPT = """\
 You are the research director of a computational drug-discovery team.
 Your job is to orchestrate an iterative investigation into a set of upregulated genes
 and decide — based on accumulated findings — what to investigate next.
 
-You have five worker tools:
+You have seven worker tools:
 
   "enrich_ppi"        Fetch STRING protein-protein interaction network + GO annotation.
                       Subquery = a specific gene name (focal gene or an interesting partner).
@@ -602,6 +1146,10 @@ You have five worker tools:
                       Score near 0 = no prior evidence (genuine white space for dark genes).
                       Score near 1 = heavily studied (focus hypothesis on novelty angle).
 
+  "clinical_trials"   Stub clinical-trials scout for active disease or target programs.
+
+  "pathway_crosstalk" Stub crosstalk scout for overlapping pathways and PPI bridge genes.
+
   "finalize"          Enough evidence gathered — proceed to hypothesis synthesis.
 
 RECOMMENDED STRATEGY:
@@ -619,7 +1167,7 @@ PRUNING: After each round you may prune genes with no PPI partners, no DepMap es
 OT score < 0.01, and no literature. Only prune when confident — when in doubt, keep the gene.
 
 OUTPUT: Respond with ONLY valid JSON (no fences, no commentary):
-{"next_step": "<enrich_ppi|literature_rag|drug_annotation|depmap_query|opentargets_query|finalize>",
+{"next_step": "<enrich_ppi|literature_rag|drug_annotation|depmap_query|opentargets_query|clinical_trials|pathway_crosstalk|finalize>",
  "subquery": "<specific gene or search string, or empty string for broad pass>",
  "reasoning": "<one sentence explaining this decision>",
  "prune_genes": ["<gene_symbol>", "..."]}
@@ -679,6 +1227,22 @@ def _sandbox_settings(state: AgentState) -> tuple[set[str], int, str]:
         "drug_annotation",
         "depmap_query",
         "opentargets_query",
+        "clinical_trials",
+        "pathway_crosstalk",
+        "evo2_fitness",
+        "esm3_design",
+        "scenic_regulon",
+        "spatial_tme",
+        "lincs_reversion",
+        "tcga_survival",
+        "pharmacogenomics_pgx",
+        "crispr_designer",
+        "alphafold_complex",
+        "viper_protein_activity",
+        "mageck_crispr",
+        "reinvent_generative",
+        "gnina_docking",
+        "rdkit_features",
     }
     allowed_steps = {step for step in config.get("allowed_agents", []) if step in all_steps}
     if not allowed_steps:

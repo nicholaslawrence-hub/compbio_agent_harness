@@ -131,7 +131,7 @@ def _fetch_semantic_scholar(gene_symbol: str, disease_context: str, max_results:
 def fetch_gene_literature_with_interactor(
     gene_symbol: str,
     interactor: str,
-    max_papers: int = 4,
+    max_papers: int = 5,
 ) -> list[dict]:
     """
     Fallback search: '{gene} AND {interactor}' via PubMed.

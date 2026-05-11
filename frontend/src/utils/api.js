@@ -31,8 +31,47 @@ export async function startSandboxAnalysis(formData) {
   return res.json()
 }
 
+export async function listSandboxDesigns() {
+  const res = await fetch(`${BASE}/sandbox/designs`, { headers: authHeader() })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function loadSandboxDesign(designId) {
+  const res = await fetch(`${BASE}/sandbox/designs/${encodeURIComponent(designId)}`, { headers: authHeader() })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function saveSandboxDesign(designId, payload) {
+  const res = await fetch(`${BASE}/sandbox/designs/${encodeURIComponent(designId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function getJobStatus(jobId) {
   const res = await fetch(`${BASE}/jobs/${jobId}`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function getNetworkState(jobId) {
+  const res = await fetch(`${BASE}/network/${jobId}/state`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function resolveApproval(jobId, nodeId, decision) {
+  const body = new FormData()
+  body.append('decision', decision)
+  const res = await fetch(`${BASE}/network/${jobId}/approval/${nodeId}`, {
+    method: 'POST',
+    body,
+  })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }

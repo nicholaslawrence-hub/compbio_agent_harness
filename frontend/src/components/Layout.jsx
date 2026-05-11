@@ -1,15 +1,17 @@
 ﻿import { useState } from 'react'
-import { Outlet, NavLink, Link } from 'react-router-dom'
+import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
 import { Dna, Github, Linkedin, Search, UserCircle2, Menu, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function Layout() {
   const { user, loading } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
+  const fullBleed = location.pathname.startsWith('/sandbox')
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-50 bg-slate-950">
+      {!fullBleed && <header className="sticky top-0 z-50 bg-slate-950">
         <div className="h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
         <div className="max-w-[1440px] mx-auto px-4 sm:px-10 h-16 sm:h-20 flex items-center justify-between">
 
@@ -57,6 +59,17 @@ export default function Layout() {
                   )}
                 </>
               )}
+            </NavLink>
+
+            <NavLink
+              to="/tools"
+              className={({ isActive }) =>
+                `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
+                  isActive ? 'text-white' : 'text-white hover:text-amber-400'
+                }`
+              }
+            >
+              Tool Docs
             </NavLink>
 
             <NavLink
@@ -153,6 +166,17 @@ export default function Layout() {
             >
               Sandbox
             </NavLink>
+            <NavLink
+              to="/tools"
+              onClick={() => setMenuOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-semibold transition-colors ${
+                  isActive ? 'text-white bg-slate-800' : 'text-white hover:text-amber-400 hover:bg-slate-800/50'
+                }`
+              }
+            >
+              Tool Docs
+            </NavLink>
             {!loading && (
               user ? (
                 <Link
@@ -177,13 +201,13 @@ export default function Layout() {
         )}
 
         <div className="h-px bg-slate-800/80" />
-      </header>
+      </header>}
 
-      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-10 py-6 sm:py-10">
+      <main className={fullBleed ? 'flex-1 w-full p-0' : 'flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-10 py-6 sm:py-10'}>
         <Outlet />
       </main>
 
-      <footer className="border-t border-slate-700 bg-slate-950 mt-12">
+      {!fullBleed && <footer className="border-t border-slate-700 bg-slate-950 mt-12">
         <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-10 pt-14 pb-10">
 
           {/* Top: logo + columns */}
@@ -209,6 +233,7 @@ export default function Layout() {
                 <li><Link to="/"          className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Home</Link></li>
                 <li><Link to="/run"       className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Run Analysis</Link></li>
                 <li><Link to="/sandbox"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sandbox</Link></li>
+                <li><Link to="/tools"     className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Tool Docs</Link></li>
                 <li><Link to="/gene" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Gene Lookup</Link></li>
               </ul>
             </div>
@@ -256,7 +281,7 @@ export default function Layout() {
           </div>
 
         </div>
-      </footer>
+      </footer>}
     </div>
   )
 }

@@ -9,14 +9,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@xyflow/react": "^12.4.4",
+    "clsx": "^2.1.1",
+    "dagre": "^0.8.5",
+    "lucide-react": "^0.447.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2",
     "react-dropzone": "^14.2.10",
     "react-markdown": "^9.0.1",
-    "recharts": "^2.13.0",
-    "lucide-react": "^0.447.0",
-    "clsx": "^2.1.1"
+    "react-router-dom": "^6.26.2",
+    "recharts": "^2.13.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.11",

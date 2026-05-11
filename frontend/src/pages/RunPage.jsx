@@ -32,52 +32,43 @@ const TIPS = [
 
 export default function RunPage() {
   return (
-    <div className="py-10 sm:py-16">
-      <div className="mb-10">
-        <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-2">New Analysis</p>
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3 tracking-tight">Launch the agent network</h1>
-        <p className="text-base text-white/80 max-w-lg">
-          Upload a count matrix and configure your experiment. Results are ready in minutes.
-        </p>
+    <div className="py-5">
+      <div className="mb-4 border-b border-slate-700 pb-3">
+        <h1 className="text-2xl font-semibold text-white tracking-tight">Run Analysis</h1>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-10 lg:gap-14 items-start">
-
-        {/* ── Left: form ──────────────────────────────────────── */}
-        <div className="w-full lg:w-[58%] glass-panel rounded-2xl p-6 sm:p-8">
+      <div className="grid gap-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] items-start">
+        <div className="min-w-0">
           <UploadForm />
         </div>
 
-        {/* ── Right: sticky reference panel ───────────────────── */}
-        <div className="w-full lg:w-[42%] lg:sticky lg:top-28 space-y-6">
+        <aside className="min-w-0 lg:sticky lg:top-24">
+          <section>
+            <p className="bg-slate-800 px-2 py-1 text-xs font-bold text-white">Input reference</p>
+            <table className="mt-3 w-full border-collapse text-left text-xs">
+              <tbody>
+                {FIELD_DOCS.map(({ field, doc }) => (
+                  <tr key={field} className="border-b border-slate-800 align-top">
+                    <th className="w-32 py-2 pr-4 font-semibold text-white">{field}</th>
+                    <td className="py-2 leading-relaxed text-slate-300">{doc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
 
-          {/* Input reference */}
-          <div className="glass-panel rounded-2xl p-6">
-            <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-5">Input reference</p>
-            <div className="space-y-5">
-              {FIELD_DOCS.map(({ field, doc }) => (
-                <div key={field} className="border-b border-slate-800/60 pb-4 last:border-0 last:pb-0">
-                  <p className="text-sm font-semibold text-white mb-1">{field}</p>
-                  <p className="text-sm text-white/70 leading-relaxed">{doc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Tips */}
-          <div className="glass-panel rounded-2xl p-6 border border-slate-700/80">
-            <p className="text-sm uppercase tracking-wide text-amber-300 font-semibold mb-4">Tips</p>
-            <ul className="space-y-3">
+          <section className="mt-5">
+            <p className="bg-slate-800 px-2 py-1 text-xs font-bold text-white">Tips</p>
+            <ol className="mt-3 space-y-2 text-xs">
               {TIPS.map((tip, i) => (
-                <li key={i} className="flex gap-3">
-                  <span className="text-xs text-amber-300 font-semibold pt-0.5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="text-sm text-white leading-relaxed">{tip}</span>
+                <li key={i} className="grid grid-cols-[2rem_1fr] gap-2">
+                  <span className="text-slate-500">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="leading-relaxed text-slate-300">{tip}</span>
                 </li>
               ))}
-            </ul>
-          </div>
-
-        </div>
+            </ol>
+          </section>
+        </aside>
       </div>
     </div>
   )

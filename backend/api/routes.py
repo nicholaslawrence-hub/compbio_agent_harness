@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from config import settings
 from agents.graph import get_pipeline
 from agents.state import AgentState
+from agents.runtime import checkpoint_payload, load_checkpoint, register_artifact, save_checkpoint
 from db.ncbi import search_sra, fetch_pubmed_abstracts
 from db.uniprot import search_protein
 from db.chembl import get_drug_interactions
@@ -35,6 +36,20 @@ class JobStatus(BaseModel):
     progress: int
     result: Optional[dict] = None
     errors: list[str] = []
+    network_topology: Optional[dict] = None
+    execution_events: list[dict] = []
+    prompt_payloads: list[dict] = []
+
+
+class SandboxDesignPayload(BaseModel):
+    name: str = "RNAgent sandbox design"
+    nodes: list[dict]
+    edges: list[dict]
+    viewport: Optional[dict] = None
+    directive: str = ""
+    disease_term: str = ""
+    condition_a: str = "disease"
+    condition_b: str = "control"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,6 +68,17 @@ def _parse_sample_conditions(raw: str) -> dict[str, str]:
             k, v = pair.split(":", 1)
             result[k.strip()] = v.strip()
     return result
+
+
+def _sandbox_design_dir() -> Path:
+    path = settings.results_dir / "sandbox_designs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _safe_design_id(raw: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in raw.strip())
+    return safe[:80] or "default"
 
 
 async def _read_optional_context_file(job_id: str, upload: UploadFile | None, key: str) -> dict | None:
@@ -89,6 +115,16 @@ def _base_initial_state(
         "sample_conditions": sample_conditions,
         "study_context": study_context or {},
         "sandbox_config": sandbox_config or {},
+        "network_topology": (sandbox_config or {}).get("network_topology", {}),
+        "artifact_registry": {},
+        "node_outputs": {},
+        "node_status": {},
+        "pending_tasks": {},
+        "approval_requests": {},
+        "provenance_ledger": [],
+        "edge_decisions": {},
+        "external_results": {},
+        "active_node_id": "",
         "dge_results": [],
         "all_dge_results": [],
         "detected_genes": [],
@@ -100,6 +136,22 @@ def _base_initial_state(
         "drug_interactions": [],
         "depmap_results": [],
         "opentargets_results": [],
+        "clinical_trials_results": [],
+        "pathway_crosstalk_results": [],
+        "evo2_fitness_results": [],
+        "esm3_design_results": [],
+        "scenic_regulon_results": [],
+        "spatial_tme_results": [],
+        "lincs_reversion_results": [],
+        "tcga_survival_results": [],
+        "pharmacogenomics_pgx_results": [],
+        "crispr_design_results": [],
+        "alphafold_complex_results": [],
+        "viper_protein_activity_results": [],
+        "mageck_crispr_results": [],
+        "reinvent_generative_results": [],
+        "gnina_docking_results": [],
+        "rdkit_feature_results": [],
         "hypotheses": [],
         "final_report": None,
         "errors": [],
@@ -111,6 +163,15 @@ def _base_initial_state(
         "supervisor_iterations": 0,
         "supervisor_context":    [],
         "pruned_genes":          [],
+        "routing_history":       [],
+        "prompt_payloads":       [],
+        "execution_events":      [],
+        "critic_feedback":       [],
+        "critic_retries":        {},
+        "retry_counts":          {},
+        "critic_route":          "",
+        "flow_killed":           False,
+        "previous_node_id":      "",
         "status":                "pending",
         "progress":              0,
     }
@@ -120,7 +181,8 @@ async def _run_pipeline(job_id: str, state: AgentState):
     def _run_streaming():
         """Run the graph with stream() so each node's status/progress is reflected live."""
         accumulated = {**state}
-        for step in get_pipeline().stream(state):
+        topology = state.get("network_topology") or state.get("sandbox_config", {}).get("network_topology")
+        for step in get_pipeline(topology).stream(state):
             for _node_name, node_out in step.items():
                 accumulated.update(node_out)
                 # Push live status + progress back to the job store the SSE stream reads
@@ -143,6 +205,32 @@ async def _run_pipeline(job_id: str, state: AgentState):
                     _jobs[job_id]["supervisor_context"] = (
                         _jobs[job_id]["supervisor_context"] + node_out["supervisor_context"]
                     )
+                if node_out.get("execution_events"):
+                    _jobs[job_id].setdefault("execution_events", [])
+                    _jobs[job_id]["execution_events"] = (
+                        _jobs[job_id]["execution_events"] + node_out["execution_events"]
+                    )
+                if node_out.get("prompt_payloads"):
+                    _jobs[job_id].setdefault("prompt_payloads", [])
+                    _jobs[job_id]["prompt_payloads"] = (
+                        _jobs[job_id]["prompt_payloads"] + node_out["prompt_payloads"]
+                    )
+                if node_out.get("routing_history"):
+                    _jobs[job_id].setdefault("routing_history", [])
+                    _jobs[job_id]["routing_history"] = (
+                        _jobs[job_id]["routing_history"] + node_out["routing_history"]
+                    )
+                for key in ("node_outputs", "node_status", "artifact_registry", "pending_tasks", "approval_requests"):
+                    if node_out.get(key):
+                        _jobs[job_id][key] = node_out[key]
+                if node_out.get("provenance_ledger"):
+                    _jobs[job_id].setdefault("provenance_ledger", [])
+                    _jobs[job_id]["provenance_ledger"] = (
+                        _jobs[job_id]["provenance_ledger"] + node_out["provenance_ledger"]
+                    )
+                latest_state = {**accumulated, **node_out}
+                _jobs[job_id]["latest_state"] = latest_state
+                _jobs[job_id]["checkpoint"] = save_checkpoint(job_id, latest_state)
         return accumulated
 
     try:
@@ -165,12 +253,41 @@ async def _run_pipeline(job_id: str, state: AgentState):
                 "literature_results": final_state.get("literature_results", []),
                 "depmap_results": final_state.get("depmap_results", []),
                 "opentargets_results": final_state.get("opentargets_results", []),
+                "clinical_trials_results": final_state.get("clinical_trials_results", []),
+                "pathway_crosstalk_results": final_state.get("pathway_crosstalk_results", []),
+                "evo2_fitness_results": final_state.get("evo2_fitness_results", []),
+                "esm3_design_results": final_state.get("esm3_design_results", []),
+                "scenic_regulon_results": final_state.get("scenic_regulon_results", []),
+                "spatial_tme_results": final_state.get("spatial_tme_results", []),
+                "lincs_reversion_results": final_state.get("lincs_reversion_results", []),
+                "tcga_survival_results": final_state.get("tcga_survival_results", []),
+                "pharmacogenomics_pgx_results": final_state.get("pharmacogenomics_pgx_results", []),
+                "crispr_design_results": final_state.get("crispr_design_results", []),
+                "alphafold_complex_results": final_state.get("alphafold_complex_results", []),
+                "viper_protein_activity_results": final_state.get("viper_protein_activity_results", []),
+                "mageck_crispr_results": final_state.get("mageck_crispr_results", []),
+                "reinvent_generative_results": final_state.get("reinvent_generative_results", []),
+                "gnina_docking_results": final_state.get("gnina_docking_results", []),
+                "rdkit_feature_results": final_state.get("rdkit_feature_results", []),
+                "routing_history": final_state.get("routing_history", []),
+                "prompt_payloads": final_state.get("prompt_payloads", []),
+                "execution_events": final_state.get("execution_events", []),
+                "network_topology": final_state.get("network_topology", {}),
+                "node_outputs": final_state.get("node_outputs", {}),
+                "node_status": final_state.get("node_status", {}),
+                "artifact_registry": final_state.get("artifact_registry", {}),
+                "pending_tasks": final_state.get("pending_tasks", {}),
+                "approval_requests": final_state.get("approval_requests", {}),
+                "provenance_ledger": final_state.get("provenance_ledger", []),
             },
             "errors": final_state.get("errors", []),
+            "latest_state": final_state,
+            "checkpoint": save_checkpoint(job_id, final_state),
         })
         _sync_job_status(job_id, final_status)
     except Exception as e:
         _jobs[job_id].update({"status": "failed", "errors": [str(e)], "progress": 0})
+        save_checkpoint(job_id, _jobs[job_id])
         _sync_job_status(job_id, "failed")
 
 
@@ -208,6 +325,12 @@ async def start_analysis(
     save_path = settings.raw_dir / f"{job_id}_{count_matrix.filename}"
     content = await count_matrix.read()
     save_path.write_bytes(content)
+    matrix_artifact = register_artifact(
+        str(save_path),
+        "count_matrix",
+        f"Uploaded count matrix {count_matrix.filename}",
+        {"filename": count_matrix.filename},
+    )
 
     conditions = _parse_sample_conditions(sample_conditions)
     study_context = {
@@ -227,6 +350,7 @@ async def start_analysis(
         sample_conditions=conditions,
         study_context=study_context,
     )
+    initial_state["artifact_registry"] = {matrix_artifact["artifact_id"]: matrix_artifact}
 
     _jobs[job_id] = {"status": "queued", "progress": 0, "result": None, "errors": []}
 
@@ -277,9 +401,67 @@ async def sandbox_templates():
                 "label": "Drug Annotation",
                 "description": "UniProt structure/function and ChEMBL drug landscape.",
             },
+            {
+                "id": "clinical_trials",
+                "label": "Clinical Trials",
+                "description": "Stubbed clinical trial search for active disease/target programs.",
+            },
+            {
+                "id": "pathway_crosstalk",
+                "label": "Pathway Crosstalk",
+                "description": "Stubbed crosstalk analyzer for overlapping pathways and PPI bridges.",
+            },
         ],
-        "required_core": ["run_dge", "pathway_enrichment", "synthesize_hypotheses", "generate_report"],
+        "control": ["study_context", "supervisor", "critic", "report"],
+        "required_core": ["run_dge", "generate_report"],
     }
+
+
+@router.get("/sandbox/designs", summary="List saved sandbox designs")
+async def list_sandbox_designs(request: Request):
+    auth_header = request.headers.get("Authorization", "")
+    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else "local"
+    prefix = f"{_safe_design_id(str(user_id))}__"
+    designs = []
+    for path in _sandbox_design_dir().glob(f"{prefix}*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        designs.append({
+            "id": path.stem.removeprefix(prefix),
+            "name": payload.get("name", path.stem.removeprefix(prefix)),
+            "updated_at": payload.get("updated_at"),
+            "node_count": len(payload.get("nodes", [])),
+            "edge_count": len(payload.get("edges", [])),
+        })
+    return {"designs": sorted(designs, key=lambda item: item.get("updated_at") or "", reverse=True)}
+
+
+@router.get("/sandbox/designs/{design_id}", summary="Load a saved sandbox design")
+async def get_sandbox_design(design_id: str, request: Request):
+    auth_header = request.headers.get("Authorization", "")
+    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else "local"
+    path = _sandbox_design_dir() / f"{_safe_design_id(str(user_id))}__{_safe_design_id(design_id)}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Sandbox design not found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@router.put("/sandbox/designs/{design_id}", summary="Save a sandbox design")
+async def save_sandbox_design(design_id: str, payload: SandboxDesignPayload, request: Request):
+    auth_header = request.headers.get("Authorization", "")
+    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else "local"
+    safe_id = _safe_design_id(design_id)
+    path = _sandbox_design_dir() / f"{_safe_design_id(str(user_id))}__{safe_id}.json"
+    data = payload.dict()
+    data.update({
+        "id": safe_id,
+        "version": 1,
+        "updated_at": str(uuid.uuid1().time),
+    })
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return {"id": safe_id, "saved": True, "node_count": len(payload.nodes), "edge_count": len(payload.edges)}
 
 
 @router.post("/sandbox/run", summary="Run a constrained supervisor sandbox")
@@ -292,6 +474,7 @@ async def start_sandbox_analysis(
     condition_a: str = Form("disease", description="Name of disease condition label"),
     condition_b: str = Form("control", description="Name of control condition label"),
     sandbox_config: str = Form(..., description="JSON supervisor sandbox configuration"),
+    network_topology: str = Form("", description="Serialized visual network topology"),
 ):
     job_id = str(uuid.uuid4())
 
@@ -300,8 +483,53 @@ async def start_sandbox_analysis(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="sandbox_config must be valid JSON")
 
+    topology = config.get("network_topology") or {}
+    if network_topology:
+        try:
+            topology = json.loads(network_topology)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="network_topology must be valid JSON")
+    if topology:
+        config["network_topology"] = topology
+
     allowed = set(config.get("allowed_agents", []))
-    valid = {"enrich_ppi", "literature_rag", "drug_annotation", "depmap_query", "opentargets_query"}
+    valid = {
+        "study_context",
+        "count_matrix_input",
+        "clinical_metadata",
+        "run_dge",
+        "pathway_enrichment",
+        "supervisor",
+        "critic",
+        "sync_gateway",
+        "approval_gate",
+        "translator",
+        "enrich_ppi",
+        "literature_rag",
+        "drug_annotation",
+        "depmap_query",
+        "opentargets_query",
+        "clinical_trials",
+        "pathway_crosstalk",
+        "evo2_fitness",
+        "esm3_design",
+        "scenic_regulon",
+        "spatial_tme",
+        "lincs_reversion",
+        "tcga_survival",
+        "pharmacogenomics_pgx",
+        "crispr_designer",
+        "alphafold_complex",
+        "viper_protein_activity",
+        "mageck_crispr",
+        "reinvent_generative",
+        "gnina_docking",
+        "rdkit_features",
+        "critic_structural_tractability",
+        "critic_microenvironment_validity",
+        "critic_red_team_fda",
+        "report",
+    }
     config["allowed_agents"] = sorted(allowed & valid)
     if not config["allowed_agents"]:
         raise HTTPException(status_code=400, detail="Select at least one sandbox agent")
@@ -314,6 +542,12 @@ async def start_sandbox_analysis(
     save_path = settings.raw_dir / f"{job_id}_{Path(count_matrix.filename).name}"
     content = await count_matrix.read()
     save_path.write_bytes(content)
+    matrix_artifact = register_artifact(
+        str(save_path),
+        "count_matrix",
+        f"Uploaded count matrix {Path(count_matrix.filename).name}",
+        {"filename": Path(count_matrix.filename).name},
+    )
 
     conditions = _parse_sample_conditions(sample_conditions)
     directive = str(config.get("directive", "")).strip()
@@ -328,6 +562,7 @@ async def start_sandbox_analysis(
         study_context=study_context,
         sandbox_config=config,
     )
+    initial_state["artifact_registry"] = {matrix_artifact["artifact_id"]: matrix_artifact}
 
     _jobs[job_id] = {
         "status": "queued",
@@ -335,6 +570,19 @@ async def start_sandbox_analysis(
         "result": None,
         "errors": [],
         "sandbox_config": config,
+        "network_topology": topology,
+        "execution_events": [],
+        "prompt_payloads": [],
+        "routing_history": [],
+        "artifact_registry": initial_state["artifact_registry"],
+        "node_outputs": {},
+        "node_status": {},
+        "pending_tasks": {},
+        "approval_requests": {},
+        "provenance_ledger": [],
+        "edge_decisions": {},
+        "external_results": {},
+        "checkpoint": checkpoint_payload(initial_state),
     }
 
     auth_header = request.headers.get("Authorization", "")
@@ -363,7 +611,119 @@ async def get_job_status(job_id: str):
         progress=j.get("progress", 0),
         result=j.get("result"),
         errors=j.get("errors", []),
+        network_topology=j.get("network_topology") or (j.get("result") or {}).get("network_topology"),
+        execution_events=j.get("execution_events", []),
+        prompt_payloads=j.get("prompt_payloads", []),
     )
+
+
+@router.get("/network/{job_id}/state", summary="Fetch latest checkpointed network state")
+async def get_network_state(job_id: str):
+    disk_checkpoint = load_checkpoint(job_id)
+    if job_id not in _jobs and not disk_checkpoint:
+        raise HTTPException(status_code=404, detail="Job not found")
+    j = _jobs.get(job_id, {})
+    checkpoint = j.get("checkpoint") or {
+        "status": j.get("status"),
+        "progress": j.get("progress", 0),
+        "network_topology": j.get("network_topology"),
+        "node_outputs": j.get("node_outputs", {}),
+        "node_status": j.get("node_status", {}),
+        "artifact_registry": j.get("artifact_registry", {}),
+        "pending_tasks": j.get("pending_tasks", {}),
+        "approval_requests": j.get("approval_requests", {}),
+        "provenance_ledger": j.get("provenance_ledger", []),
+        "edge_decisions": j.get("edge_decisions", {}),
+        "external_results": j.get("external_results", {}),
+        "execution_events": j.get("execution_events", []),
+        "prompt_payloads": j.get("prompt_payloads", []),
+        "errors": j.get("errors", []),
+    } if j else disk_checkpoint
+    return {"job_id": job_id, "checkpoint": checkpoint}
+
+
+@router.post("/network/{job_id}/approval/{node_id}", summary="Approve or reject a paused approval gate")
+async def resolve_approval(
+    job_id: str,
+    node_id: str,
+    background_tasks: BackgroundTasks,
+    decision: str = Form(...),
+):
+    if decision not in {"approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="decision must be approved or rejected")
+    checkpoint = load_checkpoint(job_id)
+    if job_id not in _jobs and not checkpoint:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    stored = _jobs.get(job_id, {})
+    state = stored.get("latest_state") or (checkpoint or stored.get("checkpoint") or {}).get("resume_state") or checkpoint or {}
+    approvals = dict(state.get("approval_requests", {}) or {})
+    current = approvals.get(node_id, {"node_id": node_id})
+    current["decision"] = decision
+    current["status"] = "resolved"
+    approvals[node_id] = current
+    state["approval_requests"] = approvals
+    state["status"] = "queued"
+    state.setdefault("node_status", {})[node_id] = "approval_resolved"
+    state["checkpoint"] = save_checkpoint(job_id, state)
+    job = _jobs.setdefault(job_id, {})
+    job.update({
+        "status": "queued",
+        "progress": state.get("progress", 0),
+        "network_topology": state.get("network_topology", {}),
+        "node_outputs": state.get("node_outputs", {}),
+        "node_status": state.get("node_status", {}),
+        "pending_tasks": state.get("pending_tasks", {}),
+        "approval_requests": approvals,
+        "provenance_ledger": state.get("provenance_ledger", []),
+        "latest_state": state,
+        "checkpoint": state["checkpoint"],
+    })
+    background_tasks.add_task(_run_pipeline, job_id, state)
+    return {"job_id": job_id, "node_id": node_id, "decision": decision, "checkpoint": state["checkpoint"]}
+
+
+@router.post("/network/{job_id}/task/{node_id}/complete", summary="Attach an external worker result and resume the network")
+async def complete_external_task(
+    job_id: str,
+    node_id: str,
+    background_tasks: BackgroundTasks,
+    payload: dict,
+):
+    checkpoint = load_checkpoint(job_id)
+    if job_id not in _jobs and not checkpoint:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    stored = _jobs.get(job_id, {})
+    state = stored.get("latest_state") or (checkpoint or stored.get("checkpoint") or {}).get("resume_state") or checkpoint or {}
+    external_results = dict(state.get("external_results", {}) or {})
+    external_results[node_id] = payload
+    state["external_results"] = external_results
+    state.setdefault("node_outputs", {})[node_id] = {
+        "summary": payload.get("summary", "External worker completed."),
+        "data": payload,
+    }
+    state.setdefault("node_status", {})[node_id] = "external_complete"
+    pending = dict(state.get("pending_tasks", {}) or {})
+    if node_id in pending:
+        pending[node_id] = {**pending[node_id], "status": "complete", "completed_at": asyncio.get_event_loop().time()}
+    state["pending_tasks"] = pending
+    state["status"] = "queued"
+    state["checkpoint"] = save_checkpoint(job_id, state)
+    job = _jobs.setdefault(job_id, {})
+    job.update({
+        "status": "queued",
+        "progress": state.get("progress", 0),
+        "network_topology": state.get("network_topology", {}),
+        "node_outputs": state.get("node_outputs", {}),
+        "node_status": state.get("node_status", {}),
+        "pending_tasks": pending,
+        "approval_requests": state.get("approval_requests", {}),
+        "latest_state": state,
+        "checkpoint": state["checkpoint"],
+    })
+    background_tasks.add_task(_run_pipeline, job_id, state)
+    return {"job_id": job_id, "node_id": node_id, "checkpoint": state["checkpoint"]}
 
 
 @router.get("/jobs/{job_id}/stream", summary="SSE stream of job progress")
@@ -380,6 +740,18 @@ async def stream_job(job_id: str):
                 "errors": j.get("errors", []),
                 "supervisor_reasoning": j.get("supervisor_reasoning", ""),
                 "supervisor_context": j.get("supervisor_context", []),
+                "execution_events": j.get("execution_events", []),
+                "prompt_payloads": j.get("prompt_payloads", []),
+                "routing_history": j.get("routing_history", []),
+                "network_topology": j.get("network_topology") or (j.get("result") or {}).get("network_topology"),
+                "node_outputs": j.get("node_outputs", {}),
+                "node_status": j.get("node_status", {}),
+                "artifact_registry": j.get("artifact_registry", {}),
+                "pending_tasks": j.get("pending_tasks", {}),
+                "approval_requests": j.get("approval_requests", {}),
+                "provenance_ledger": j.get("provenance_ledger", []),
+                "edge_decisions": j.get("edge_decisions", {}),
+                "external_results": j.get("external_results", {}),
             })
             yield f"data: {data}\n\n"
             if j.get("status") in ("complete", "failed", "dge_failed"):
