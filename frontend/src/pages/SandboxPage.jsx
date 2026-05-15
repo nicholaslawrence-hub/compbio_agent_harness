@@ -460,6 +460,7 @@ export default function SandboxPage() {
     const dataWithActions = {
       ...node.data,
       category: nodeCard?.category,
+      wip: Boolean(nodeCard?.wip),
       descriptor: nodeCard ? biologicalDescriptor(nodeCard) : 'supervisor hub',
       inputs: nodeCard?.inputs || [],
       outputs: nodeCard?.outputs || [],

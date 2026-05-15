@@ -2,18 +2,19 @@ import os
 from urllib.parse import urlencode, quote
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from auth import create_access_token
+from auth import create_access_token, create_exchange_code, decode_exchange_code
 from db.database import get_db
 from db.user_models import User
 
 router = APIRouter(prefix="/auth", tags=["oauth"])
 
-FRONTEND_URL     = os.getenv("FRONTEND_URL", "http://localhost:5173")
-BACKEND_URL      = os.getenv("BACKEND_URL",  "http://localhost:8000")
+FRONTEND_URL     = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+BACKEND_URL      = os.getenv("BACKEND_URL",  "http://localhost:8000").rstrip("/")
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
@@ -57,7 +58,28 @@ def _error_redirect(msg: str = "oauth_failed"):
     return RedirectResponse(f"{FRONTEND_URL}/login?error={msg}")
 
 
-# ── Google ─────────────────────────────────────────────────────────────────────
+def _success_redirect(user: User) -> RedirectResponse:
+    first = user.name.split()[0] if user.name else "User"
+    code = create_exchange_code(user.id, first)
+    return RedirectResponse(f"{FRONTEND_URL}/oauth/callback?code={quote(code)}")
+
+
+# Token exchange ──────────────────────────────────────────────────────────────
+
+class ExchangePayload(BaseModel):
+    code: str
+
+
+@router.post("/oauth/exchange")
+def exchange_oauth_code(payload: ExchangePayload):
+    entry = decode_exchange_code(payload.code)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid or expired exchange code.")
+    token = create_access_token(entry["user_id"])
+    return {"token": token, "name": entry["name"]}
+
+
+# Google ──────────────────────────────────────────────────────────────────────
 
 @router.get("/google/login")
 def google_login():
@@ -99,12 +121,10 @@ def google_callback(code: str = None, error: str = None, db: Session = Depends(g
         info = info_res.json()
 
     user = _get_or_create_oauth_user(db, "google", info["id"], info.get("email"), info.get("name", "User"))
-    token = create_access_token(user.id)
-    first = quote(user.name.split()[0])
-    return RedirectResponse(f"{FRONTEND_URL}/oauth/callback?token={token}&name={first}")
+    return _success_redirect(user)
 
 
-# ── GitHub ─────────────────────────────────────────────────────────────────────
+# GitHub ──────────────────────────────────────────────────────────────────────
 
 @router.get("/github/login")
 def github_login():
@@ -157,6 +177,4 @@ def github_callback(code: str = None, error: str = None, db: Session = Depends(g
 
     name = info.get("name") or info.get("login") or "GitHub User"
     user = _get_or_create_oauth_user(db, "github", str(info["id"]), email, name)
-    token = create_access_token(user.id)
-    first = quote(user.name.split()[0])
-    return RedirectResponse(f"{FRONTEND_URL}/oauth/callback?token={token}&name={first}")
+    return _success_redirect(user)

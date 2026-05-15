@@ -33,9 +33,32 @@ def create_access_token(user_id: int) -> str:
     return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def create_exchange_code(user_id: int, name: str) -> str:
+    """Short-lived (90s) signed code for the OAuth callback exchange. Stateless — safe with multiple workers."""
+    expire = datetime.now(timezone.utc) + timedelta(seconds=90)
+    return jwt.encode(
+        {"sub": str(user_id), "name": name, "purpose": "oauth_exchange", "exp": expire},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def decode_exchange_code(code: str) -> Optional[dict]:
+    """Returns {"user_id": int, "name": str} or None if invalid/expired/wrong purpose."""
+    try:
+        payload = jwt.decode(code, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("purpose") != "oauth_exchange":
+            return None
+        return {"user_id": int(payload["sub"]), "name": payload.get("name", "User")}
+    except (JWTError, KeyError, ValueError):
+        return None
+
+
 def decode_token(token: str) -> Optional[int]:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("purpose"):
+            return None
         return int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         return None

@@ -7,7 +7,6 @@ returning useful structured records when the external engines are not installed.
 from __future__ import annotations
 
 import hashlib
-import math
 import os
 from typing import Any
 
@@ -93,21 +92,6 @@ def run_reinvent_generation(target: str, pocket: str = "auto", n: int = 8) -> li
         return data if isinstance(data, list) else data.get("molecules", [])
     except Exception as exc:
         return [{"target": target, "source": "reinvent_api", "status": "error", "error": str(exc)}]
-    """
-    base = ["C", "N", "O", "Cl", "c1ccccc1", "C(=O)N", "S(=O)(=O)N"]
-    molecules = []
-    for i in range(n):
-        smiles = f"{base[i % len(base)]}C{i % 3 + 1}N{base[(i + 2) % len(base)]}"
-        molecules.append({
-            "target": target,
-            "pocket": pocket,
-            "smiles": smiles,
-            "rl_score": _score(f"reinvent:{target}:{i}", 0.25, 0.98),
-            "diversity_bucket": i % 4,
-            "source": "reinvent4_adapter_stub",
-        })
-    return molecules
-    """
 
 
 def run_gnina_docking(target: str, ligands: list[dict[str, Any]], receptor_pdb: str = "auto") -> list[dict[str, Any]]:
@@ -176,12 +160,18 @@ def fetch_alphafold_structure(gene: str, id_type: str = "uniprot", fmt: str = "p
 
 
 def calculate_rdkit_features(ligands: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """RDKit adapter for Morgan fingerprints and Lipinski properties.
+    """Compute Lipinski + Morgan fingerprint summaries via RDKit."""
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import Crippen, Descriptors, Lipinski, rdFingerprintGenerator, QED
+    except ImportError:
+        return [{
+            "source": "rdkit_unavailable",
+            "status": "not_configured",
+            "summary": "rdkit is not installed. Add rdkit-pypi to requirements.txt to enable real ADMET features.",
+        }]
 
-    If RDKit is available in the runtime this can be swapped to Chem.MolFromSmiles,
-    Descriptors.MolWt, Crippen.MolLogP, Lipinski.NumHDonors,
-    Lipinski.NumHAcceptors, and rdFingerprintGenerator.GetMorganGenerator.
-    """
+    fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
     rows = []
     for ligand in ligands[:20]:
         if ligand.get("source") == "adapter_not_configured" or ligand.get("status") == "not_configured":
@@ -189,21 +179,32 @@ def calculate_rdkit_features(ligands: list[dict[str, Any]]) -> list[dict[str, An
         smiles = ligand.get("smiles", "")
         if not smiles:
             continue
-        heavy = sum(1 for char in smiles if char.isalpha() and char.isupper())
-        mw = round(heavy * 24.7 + len(smiles) * 3.1, 2)
-        logp = round(math.log(max(len(smiles), 2), 10), 2)
-        hbd = smiles.count("N") + smiles.count("O")
-        hba = hbd + smiles.count("=")
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            rows.append({"smiles": smiles, "source": "rdkit", "status": "invalid_smiles"})
+            continue
+        fp = fpgen.GetFingerprint(mol)
+        mw = round(Descriptors.MolWt(mol), 2)
+        logp = round(Crippen.MolLogP(mol), 2)
+        hbd = Lipinski.NumHDonors(mol)
+        hba = Lipinski.NumHAcceptors(mol)
+        tpsa = round(Descriptors.TPSA(mol), 2)
+        rot = Lipinski.NumRotatableBonds(mol)
+        qed = round(QED.qed(mol), 3)
         rows.append({
             "smiles": smiles,
             "morgan_radius": 2,
             "morgan_bits": 2048,
-            "fingerprint_preview": hashlib.sha1(smiles.encode("utf-8")).hexdigest()[:24],
+            "morgan_onbits": int(fp.GetNumOnBits()),
+            "fingerprint_preview": hashlib.sha1(fp.ToBitString().encode("utf-8")).hexdigest()[:24],
             "mw": mw,
             "logp": logp,
             "hbd": hbd,
             "hba": hba,
+            "tpsa": tpsa,
+            "rotatable_bonds": rot,
+            "qed": qed,
             "lipinski_pass": mw <= 500 and logp <= 5 and hbd <= 5 and hba <= 10,
-            "source": "rdkit_adapter_stub",
+            "source": "rdkit",
         })
     return rows

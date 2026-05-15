@@ -417,10 +417,19 @@ async def sandbox_templates():
     }
 
 
+def _require_user_id(request: Request) -> int:
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required to manage sandbox designs.")
+    user_id = decode_token(auth_header[7:])
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    return user_id
+
+
 @router.get("/sandbox/designs", summary="List saved sandbox designs")
 async def list_sandbox_designs(request: Request):
-    auth_header = request.headers.get("Authorization", "")
-    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else "local"
+    user_id = _require_user_id(request)
     prefix = f"{_safe_design_id(str(user_id))}__"
     designs = []
     for path in _sandbox_design_dir().glob(f"{prefix}*.json"):
@@ -440,8 +449,7 @@ async def list_sandbox_designs(request: Request):
 
 @router.get("/sandbox/designs/{design_id}", summary="Load a saved sandbox design")
 async def get_sandbox_design(design_id: str, request: Request):
-    auth_header = request.headers.get("Authorization", "")
-    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else "local"
+    user_id = _require_user_id(request)
     path = _sandbox_design_dir() / f"{_safe_design_id(str(user_id))}__{_safe_design_id(design_id)}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Sandbox design not found")
@@ -450,8 +458,7 @@ async def get_sandbox_design(design_id: str, request: Request):
 
 @router.put("/sandbox/designs/{design_id}", summary="Save a sandbox design")
 async def save_sandbox_design(design_id: str, payload: SandboxDesignPayload, request: Request):
-    auth_header = request.headers.get("Authorization", "")
-    user_id = decode_token(auth_header[7:]) if auth_header.startswith("Bearer ") else "local"
+    user_id = _require_user_id(request)
     safe_id = _safe_design_id(design_id)
     path = _sandbox_design_dir() / f"{_safe_design_id(str(user_id))}__{safe_id}.json"
     data = payload.dict()

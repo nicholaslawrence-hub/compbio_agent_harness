@@ -36,6 +36,9 @@ aiofiles==24.1.0
 # Pathway enrichment
 gseapy>=1.1.3
 
+# Chemistry (RDKit features)
+rdkit-pypi>=2022.9.5
+
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

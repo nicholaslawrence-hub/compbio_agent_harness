@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
+const BASE = import.meta.env.VITE_API_BASE || '/api/v1'
+
 const ERROR_MESSAGES = {
   oauth_cancelled:          'Sign-in was cancelled.',
   oauth_failed:             'Sign-in failed. Please try again.',
@@ -15,16 +17,39 @@ export default function OAuthCallbackPage() {
   const { loginWithToken } = useAuth()
 
   useEffect(() => {
-    const token = params.get('token')
     const error = params.get('error')
-
-    if (error || !token) {
+    if (error) {
       const msg = ERROR_MESSAGES[error] || ERROR_MESSAGES.oauth_failed
       navigate(`/login?oauthError=${encodeURIComponent(msg)}`, { replace: true })
       return
     }
 
-    loginWithToken(token).then(() => navigate('/account', { replace: true }))
+    const legacyToken = params.get('token')
+    if (legacyToken) {
+      loginWithToken(legacyToken).then(() => navigate('/account', { replace: true }))
+      return
+    }
+
+    const code = params.get('code')
+    if (!code) {
+      navigate(`/login?oauthError=${encodeURIComponent(ERROR_MESSAGES.oauth_failed)}`, { replace: true })
+      return
+    }
+
+    fetch(`${BASE}/auth/oauth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('exchange_failed')
+        const body = await res.json()
+        return loginWithToken(body.token)
+      })
+      .then(() => navigate('/account', { replace: true }))
+      .catch(() => {
+        navigate(`/login?oauthError=${encodeURIComponent(ERROR_MESSAGES.oauth_failed)}`, { replace: true })
+      })
   }, [])
 
   return (
