@@ -66,19 +66,26 @@ export default function AccountPage() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
           to="/run"
           className="rounded-xl border border-amber-500/30 bg-amber-400/5 hover:bg-amber-400/10 p-6 transition-colors duration-150"
         >
-          <p className="text-amber-400 font-semibold mb-1">New analysis</p>
+          <p className="text-amber-400 font-semibold mb-1">New Analysis</p>
           <p className="text-sm text-white/40">Upload a count matrix and launch the agentic network</p>
+        </Link>
+        <Link
+          to="/sandbox"
+          className="rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900 p-6 transition-colors duration-150"
+        >
+          <p className="text-white font-semibold mb-1">Sandbox</p>
+          <p className="text-sm text-white/40">Build and deploy a custom agent network</p>
         </Link>
         <Link
           to="/gene/EGFR"
           className="rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900 p-6 transition-colors duration-150"
         >
-          <p className="text-white font-semibold mb-1">Gene lookup</p>
+          <p className="text-white font-semibold mb-1">Gene Lookup</p>
           <p className="text-sm text-white/40">Search protein, drug, and literature data by gene</p>
         </Link>
       </div>

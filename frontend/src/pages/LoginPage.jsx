@@ -58,52 +58,54 @@ export default function LoginPage() {
     }
   }
 
+  const oauthVerb = tab === 'login' ? 'Sign In' : 'Sign Up'
+
   return (
     <div className="min-h-[70vh] flex items-center justify-center">
       <div className="w-full max-w-md">
 
-        <div className="mb-8 text-center">
+        <div className="mb-5 text-center">
           <h1 className="text-3xl font-bold text-white">
-            {tab === 'login' ? 'Sign in' : 'Create account'}
+            {tab === 'login' ? 'Sign In' : 'Create Account'}
           </h1>
         </div>
 
         {/* Tab toggle */}
-        <div className="flex rounded-xl border border-slate-800 p-1 mb-6 bg-slate-900">
+        <div className="flex rounded-xl border border-slate-800 p-1 mb-4 bg-slate-900">
           {['login', 'register'].map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setError('') }}
-              className={`flex-1 py-3 text-base font-medium rounded-lg transition-colors duration-150 ${
+              className={`flex-1 py-2.5 text-base font-medium rounded-lg transition-colors duration-150 ${
                 tab === t
                   ? 'bg-amber-400 text-slate-900'
                   : 'text-white/50 hover:text-white'
               }`}
             >
-              {t === 'login' ? 'Log in' : 'Sign up'}
+              {t === 'login' ? 'Log In' : 'Sign Up'}
             </button>
           ))}
         </div>
 
         {/* OAuth buttons */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-2.5 mb-4">
           <a
             href={`${BASE}/auth/google/login`}
-            className="flex items-center justify-center gap-3 w-full bg-white hover:bg-slate-100 text-slate-900 font-semibold text-sm py-3.5 rounded-xl transition-colors duration-150"
+            className="flex items-center justify-center gap-3 w-full bg-white hover:bg-slate-100 text-slate-900 font-semibold text-sm py-3 rounded-xl transition-colors duration-150"
           >
             <GoogleIcon />
-            Continue with Google
+            {oauthVerb} with Google
           </a>
           <a
             href={`${BASE}/auth/github/login`}
-            className="flex items-center justify-center gap-3 w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-sm py-3.5 rounded-xl transition-colors duration-150"
+            className="flex items-center justify-center gap-3 w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-sm py-3 rounded-xl transition-colors duration-150"
           >
             <GitHubIcon />
-            Continue with GitHub
+            {oauthVerb} with GitHub
           </a>
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="flex-1 h-px bg-slate-800" />
           <span className="text-xs text-white/40 font-medium">or</span>
           <div className="flex-1 h-px bg-slate-800" />
@@ -156,9 +158,9 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-900 font-bold py-4 rounded-xl transition-colors duration-150 text-lg mt-2"
+            className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-900 font-bold py-3 rounded-xl transition-colors duration-150 text-base mt-1"
           >
-            {loading ? 'Please wait…' : tab === 'login' ? 'Sign in' : 'Create account'}
+            {loading ? 'Please wait…' : tab === 'login' ? 'Sign In' : 'Create Account'}
           </button>
         </form>
 

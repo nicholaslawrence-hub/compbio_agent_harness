@@ -1,17 +1,36 @@
-﻿import { useState } from 'react'
-import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
-import { Dna, Github, Linkedin, Search, UserCircle2, Menu, X } from 'lucide-react'
+﻿import { useState, useRef, useEffect } from 'react'
+import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Dna, Github, Linkedin, Search, UserCircle2, Menu, X, ChevronDown, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function Layout() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef(null)
+  const navigate = useNavigate()
   const location = useLocation()
   const fullBleed = location.pathname.startsWith('/sandbox')
 
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleLogout = () => {
+    logout()
+    setDropdownOpen(false)
+    navigate('/')
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
-      {!fullBleed && <header className="sticky top-0 z-50 bg-slate-950">
+      {!fullBleed && <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-md">
         <div className="h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
         <div className="max-w-[1440px] mx-auto px-4 sm:px-10 h-16 sm:h-20 flex items-center justify-between">
 
@@ -87,13 +106,35 @@ export default function Layout() {
 
             {!loading && (
               user ? (
-                <Link
-                  to="/account"
-                  className="flex items-center gap-2 pl-3 ml-1 border-l border-slate-800 text-sm text-white hover:text-white transition-colors duration-150"
-                >
-                  <UserCircle2 size={18} strokeWidth={1.5} />
-                  <span className="font-medium">{user.name.split(' ')[0]}</span>
-                </Link>
+                <div className="relative ml-1 pl-3 border-l border-slate-800" ref={dropdownRef}>
+                  <button
+                    onClick={() => setDropdownOpen(o => !o)}
+                    className="flex items-center gap-2 text-sm text-white hover:text-amber-400 transition-colors duration-150"
+                  >
+                    <UserCircle2 size={18} strokeWidth={1.5} />
+                    <span className="font-medium">{user.name.split(' ')[0]}</span>
+                    <ChevronDown size={14} className={`transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {dropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-44 rounded-xl border border-slate-800 bg-slate-950 shadow-xl overflow-hidden">
+                      <Link
+                        to="/account"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-3 text-sm text-white/80 hover:text-white hover:bg-slate-800/60 transition-colors duration-150"
+                      >
+                        <UserCircle2 size={15} strokeWidth={1.5} />
+                        My Account
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-400/80 hover:text-red-400 hover:bg-slate-800/60 transition-colors duration-150 border-t border-slate-800"
+                      >
+                        <LogOut size={15} strokeWidth={1.5} />
+                        Log Out
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <Link
                   to="/login"
@@ -203,7 +244,7 @@ export default function Layout() {
         <div className="h-px bg-slate-800/80" />
       </header>}
 
-      <main className={fullBleed ? 'flex-1 w-full p-0' : 'flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-10 py-6 sm:py-10'}>
+      <main className={fullBleed ? 'flex-1 w-full p-0' : 'flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-10 py-6 sm:py-10 pt-[calc(4rem+1.5rem)] sm:pt-[calc(5rem+2.5rem)]'}>
         <Outlet />
       </main>
 
