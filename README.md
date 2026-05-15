@@ -1,6 +1,6 @@
-# RNAgent — Agentic RNA-Seq Drug Discovery
+# RNAgent - Agentic RNA-Seq Drug Discovery
 
-I built this as a personal project to explore what an AI-powered bioinformatics workflow could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and a coordinated network of specialist agents runs the whole drug-target discovery workflow automatically, differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
+I built this as a personal project to explore what an AI-powered bioinformatics workflow could look like end-to-end. You upload a raw RNA-seq count matrix and a disease name, and a coordinated network of specialist agents runs the whole drug-target discovery workflow automatically, including differential expression, pathway enrichment, protein network mapping, literature mining, drug lookup, and finally an LLM that synthesises ranked therapeutic hypotheses with novelty scores.
 
 It's still a work in progress, but it's fully functional and deployed. I'd recommend testing it with the included sample data since it's calibrated to surface genuinely understudied genes rather than just returning EGFR and KRAS every time.
 
@@ -8,7 +8,7 @@ It's still a work in progress, but it's fully functional and deployed. I'd recom
 
 ---
 
-## How the agent network works
+## Functionality and Description
 
 ```
 Count Matrix + Disease Term
@@ -29,6 +29,8 @@ Count Matrix + Disease Term
 ```
 
 There's a supervisor agent at the centre that decides which specialist tools to call and in what order, based on what's been gathered so far. It's not a fixed directed graph, since the supervisor looks at the accumulated evidence each iteration and routes dynamically, so the actual execution path varies per run. Nodes 3-5 run in parallel across genes using `ThreadPoolExecutor` so it doesn't take forever. The tools are split into three clusters that respectively involve common bioinformatics tools to both align RNA-sequences, notice genes that aren't targeted in current drug prototypes or clinical trials, and a synthesis/hypothesizing cluster that will return the final result to the user. 
+
+I've also recently developed a sandbox feature for users to build their own directed acyclic graph pipelines (note: not agentic) towards drug discovery. Through a diverse palette of tools, use drag-and-drop nodes on a React Flow canvas to construct a pipeline for your count data, notes, various disease descriptions, etc. This differs from other node-based builders, because of its implementation of automated LLM translations between different biological data modalities, meaning that data translation from one node to the next is made easier and is streamlined for the user. Right now, a lot of data pipelines often struggle from dimensional mismatches, or accurately translating the many different formattings, both semantic and numerical, from different bioinformatics tools, especially compounding when traveling up the central dogma of biology, as you route from RNA-seq data to identifications of proteins, drug interactions, etc. My goal with this sandbox project was to streamline this process with LLMs that would translate one output to a data type that could easily be understood by the other. For instance, when translating between ChemBL data taken from the API to doing searches within scientific literature, you only usually get a small glimpse of the discussion, due to the high granularity of the ChemBL data-type and specific formatting. Regex pathways and other rigid evaluation methods for data verification only worsen this problem in present data tools. Thus, my hope is that this DAG-builder can provide some novel utility to the bioinformatics space. 
 
 ---
 
