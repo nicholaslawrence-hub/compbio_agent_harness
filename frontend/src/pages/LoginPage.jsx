@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 const BASE = import.meta.env.VITE_API_BASE || '/api/v1'
@@ -162,6 +162,16 @@ export default function LoginPage() {
           >
             {loading ? 'Please wait…' : tab === 'login' ? 'Sign In' : 'Create Account'}
           </button>
+
+          {tab === 'register' && (
+            <p className="text-xs text-white/30 text-center leading-relaxed">
+              By creating an account you agree to our{' '}
+              <Link to="/privacy" className="text-white/50 hover:text-white underline underline-offset-2 transition-colors duration-150">
+                Privacy Policy
+              </Link>
+              .
+            </p>
+          )}
         </form>
 
       </div>

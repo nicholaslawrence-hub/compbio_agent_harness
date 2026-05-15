@@ -46,7 +46,7 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-12 space-y-12">
+    <div className="max-w-2xl mx-auto py-6 space-y-8">
 
       {/* Profile */}
       <div>

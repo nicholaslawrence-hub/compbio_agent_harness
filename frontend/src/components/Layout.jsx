@@ -140,7 +140,7 @@ export default function Layout() {
                   to="/login"
                   className="ml-1 pl-3 border-l border-slate-800 text-sm font-medium text-white hover:text-white transition-colors duration-150"
                 >
-                  Log in
+                  Log In
                 </Link>
               )
             )}
@@ -234,7 +234,7 @@ export default function Layout() {
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2 px-3 py-3 rounded-lg text-sm font-medium text-white hover:text-white hover:bg-slate-800/50 transition-colors"
                 >
-                  Log in
+                  Log In
                 </Link>
               )
             )}
@@ -252,7 +252,7 @@ export default function Layout() {
         <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-10 pt-14 pb-10">
 
           {/* Top: logo + columns */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-10 pb-12 border-b border-slate-700">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-10 pb-12 border-b border-slate-700">
 
             {/* Brand */}
             <div className="col-span-2 sm:col-span-1">
@@ -283,9 +283,17 @@ export default function Layout() {
             <div>
               <p className="text-sm uppercase tracking-wide text-white/60 mb-5">Account</p>
               <ul className="space-y-3.5">
-                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Log in</Link></li>
-                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sign up</Link></li>
-                <li><Link to="/account" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">My Jobs</Link></li>
+                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Log In</Link></li>
+                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sign Up</Link></li>
+                <li><Link to="/account" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">My Account</Link></li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <p className="text-sm uppercase tracking-wide text-white/60 mb-5">Legal</p>
+              <ul className="space-y-3.5">
+                <li><Link to="/privacy" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Privacy Policy</Link></li>
               </ul>
             </div>
 

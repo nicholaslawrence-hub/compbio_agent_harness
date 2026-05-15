@@ -10,6 +10,7 @@ import GeneLookupPage from './pages/GeneLookupPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import AccountPage from './pages/AccountPage.jsx'
 import OAuthCallbackPage from './pages/OAuthCallbackPage.jsx'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="login" element={<LoginPage />} />
           <Route path="account" element={<AccountPage />} />
           <Route path="oauth/callback" element={<OAuthCallbackPage />} />
+          <Route path="privacy" element={<PrivacyPolicyPage />} />
         </Route>
       </Routes>
     </AuthProvider>
