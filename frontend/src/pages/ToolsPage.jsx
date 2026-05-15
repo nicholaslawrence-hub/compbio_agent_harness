@@ -358,8 +358,7 @@ function CodeBlock({ code }) {
         <Copy aria-hidden="true" size={14} strokeWidth={2} />
       </button>
       <pre
-        className="overflow-auto p-4 pr-12 text-sm leading-6 text-slate-100"
-        style={{ fontFamily: '"Fira Code", Consolas, "Courier New", Menlo, Monaco, monospace' }}
+        className="overflow-auto p-4 pr-12 text-sm leading-6 text-slate-100 font-mono"
       >
         <code>{highlightPython(code)}</code>
       </pre>
