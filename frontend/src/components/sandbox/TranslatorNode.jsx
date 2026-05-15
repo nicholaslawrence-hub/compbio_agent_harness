@@ -1,16 +1,9 @@
 import { memo } from 'react'
-import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
 import { Sparkles } from 'lucide-react'
-import { SOCKET_COLORS, type NodeSocketType } from './NodeSocket'
+import { SOCKET_COLORS } from './NodeSocket'
 
-export type TranslatorNodeData = {
-  sourceType: NodeSocketType
-  targetType: NodeSocketType
-  promptPreview?: string
-}
-
-function TranslatorNode({ data }: NodeProps<TranslatorNodeData>) {
+function TranslatorNode({ data }) {
   const sourceColor = SOCKET_COLORS[data.sourceType] || SOCKET_COLORS.context
   const targetColor = SOCKET_COLORS[data.targetType] || SOCKET_COLORS.context
 

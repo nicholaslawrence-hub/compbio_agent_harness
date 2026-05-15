@@ -1,27 +1,8 @@
 import { memo } from 'react'
-import type { NodeProps } from '@xyflow/react'
 import { Trash2 } from 'lucide-react'
-import NodeSocket, { type NodeSocketData, type NodeSocketType } from './NodeSocket'
+import NodeSocket from './NodeSocket'
 
-export type BioToolNodeData = {
-  label: string
-  type: string
-  category?: string
-  descriptor?: string
-  iterations?: number
-  execState?: 'queued' | 'running' | 'completed' | 'failed'
-  inputs?: Array<string | NodeSocketData>
-  outputs?: Array<string | NodeSocketData>
-  activeInputPorts?: string[]
-  activeOutputPorts?: string[]
-  connectionMode?: 'target' | 'dim' | ''
-  fileName?: string
-  onDelete?: () => void
-  onCountFile?: (file: File | null) => void
-  onSampleData?: () => void
-}
-
-const PORT_TYPE_BY_ID: Record<string, NodeSocketType> = {
+const PORT_TYPE_BY_ID = {
   counts: 'matrix',
   metadata: 'context',
   directive: 'context',
@@ -50,7 +31,7 @@ const PORT_TYPE_BY_ID: Record<string, NodeSocketType> = {
   report: 'control',
 }
 
-function normalizeSocket(port: string | NodeSocketData): NodeSocketData {
+function normalizeSocket(port) {
   if (typeof port !== 'string') return port
   return {
     id: port,
@@ -59,7 +40,7 @@ function normalizeSocket(port: string | NodeSocketData): NodeSocketData {
   }
 }
 
-function BioToolNode({ data, selected }: NodeProps<BioToolNodeData>) {
+function BioToolNode({ data, selected }) {
   const iterations = Math.max(1, Number(data.iterations || 1))
   const state = data.execState || 'queued'
   const stacked = iterations > 1
@@ -92,8 +73,13 @@ function BioToolNode({ data, selected }: NodeProps<BioToolNodeData>) {
         </button>
       ) : null}
       <div className="flex items-center justify-between gap-2 rounded-t-sm border-b border-[#30363D] bg-[#161B22] px-2 py-1 pr-7">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1">
           <p className="truncate font-sans text-[11px] font-medium uppercase tracking-wide text-[#E6EDF3]">{data.label}</p>
+          {data.wip ? (
+            <span className="rounded-sm border border-[#F59E0B] px-1 font-mono text-[9px] uppercase tracking-wide text-[#F59E0B]" title="Work in progress — adapter or stub, may not be fully functional">
+              WIP
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">
           {stacked ? <span className="font-mono text-[10px] text-[#8B949E]">[ ITER: {iterations} ]</span> : null}

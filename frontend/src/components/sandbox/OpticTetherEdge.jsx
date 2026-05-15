@@ -1,12 +1,6 @@
-import { BaseEdge, type EdgeProps } from '@xyflow/react'
+import { BaseEdge } from '@xyflow/react'
 
-export type OpticTetherData = {
-  status?: 'idle' | 'running'
-  flowDirection?: 'agent-to-tool' | 'tool-to-agent'
-  color?: string
-}
-
-export default function OpticTetherEdge(props: EdgeProps<OpticTetherData>) {
+export default function OpticTetherEdge(props) {
   const { id, sourceX, sourceY, targetX, targetY, data, selected } = props
   const edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
   const running = data?.status === 'running'

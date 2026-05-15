@@ -1,20 +1,6 @@
 import { Handle, Position } from '@xyflow/react'
 
-export type NodeSocketType =
-  | 'matrix'
-  | 'gene_set'
-  | 'structure'
-  | 'molecule'
-  | 'context'
-  | 'control'
-
-export interface NodeSocketData {
-  id: string
-  label: string
-  dataType: NodeSocketType
-}
-
-export const SOCKET_COLORS: Record<NodeSocketType, string> = {
+export const SOCKET_COLORS = {
   matrix: '#3B82F6',
   gene_set: '#10B981',
   structure: '#8B5CF6',
@@ -23,13 +9,7 @@ export const SOCKET_COLORS: Record<NodeSocketType, string> = {
   control: '#FBBF24',
 }
 
-export type NodeSocketProps = {
-  socket: NodeSocketData
-  direction: 'input' | 'output'
-  active?: boolean
-}
-
-export default function NodeSocket({ socket, direction, active = false }: NodeSocketProps) {
+export default function NodeSocket({ socket, direction, active = false }) {
   const isInput = direction === 'input'
   const color = active ? '#10B981' : SOCKET_COLORS[socket.dataType]
 

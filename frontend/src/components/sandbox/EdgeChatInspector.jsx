@@ -1,15 +1,4 @@
-export type EdgeChatMessage = {
-  role: 'agent' | 'tool'
-  text: string
-}
-
-export type EdgeChatInspectorProps = {
-  x: number
-  y: number
-  messages: EdgeChatMessage[]
-}
-
-export default function EdgeChatInspector({ x, y, messages }: EdgeChatInspectorProps) {
+export default function EdgeChatInspector({ x, y, messages }) {
   return (
     <div
       className="pointer-events-auto absolute z-50 max-h-[250px] w-[300px] overflow-y-auto rounded-sm border border-[#30363D] bg-[#161B22] px-2 py-1"
