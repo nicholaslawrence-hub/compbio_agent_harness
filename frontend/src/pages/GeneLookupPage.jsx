@@ -1,12 +1,12 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Search, ExternalLink, Loader2 } from 'lucide-react'
 import { getGenePPI, getGeneUniprot, getGeneDrugs, getGenePubmed } from '../utils/api.js'
 
 function Section({ title, children }) {
   return (
-    <div className="rounded-lg border border-slate-600/70 bg-slate-800/90 p-4 min-w-0 overflow-hidden shadow-[0_1px_0_rgba(255,255,255,0.05)_inset]">
-      <h3 className="font-semibold text-white/80 mb-4 uppercase tracking-wider text-xs">{title}</h3>
+    <div className="border border-slate-700 bg-[#0f1217] p-3 min-w-0 overflow-hidden">
+      <h3 className="font-semibold text-slate-100 mb-2.5 uppercase tracking-wider text-[11px]">{title}</h3>
       {children}
     </div>
   )
@@ -22,7 +22,7 @@ function ActivityRow({ drug, muted = false }) {
   const displayName = drug.molecule_name || drug.molecule_id
   const showId = drug.molecule_id && displayName !== drug.molecule_id
   return (
-    <div className="flex items-start justify-between gap-4 text-xs">
+    <div className="flex items-start justify-between gap-3 text-xs">
       <div className="min-w-0">
         <a
           href={`https://www.ebi.ac.uk/chembl/compound_report_card/${drug.molecule_id}/`}
@@ -31,17 +31,17 @@ function ActivityRow({ drug, muted = false }) {
         >
           {displayName}
         </a>
-        {showId && <p className="text-slate-400 mt-0.5">{drug.molecule_id}</p>}
+        {showId && <p className="text-slate-100 mt-0.5">{drug.molecule_id}</p>}
       </div>
       <div className="text-right shrink-0 space-y-0.5">
         <p className={Number(drug.max_phase) === 4 ? 'text-emerald-300 font-semibold' : 'text-white/75 font-medium'}>
           {phaseLabel(drug.max_phase)}
         </p>
-        <p className="text-slate-300">
+        <p className="text-slate-200">
           {drug.pchembl_value ? `pChEMBL ${drug.pchembl_value}` : `${drug.standard_type || drug.assay_type || ''}`}
         </p>
         {drug.standard_value && (
-          <p className="text-slate-400">
+          <p className="text-slate-200">
             {drug.standard_type} {drug.standard_value} {drug.standard_units}
           </p>
         )}
@@ -65,23 +65,21 @@ export default function GeneLookupPage() {
   const lookup = async (sym) => {
     const s = sym.trim().toUpperCase()
     if (!s) return
-    setLoading(true)
-    setError('')
-    setData(null)
+    setLoading(true); setError(''); setData(null)
     try {
       const [ppi, uniprot, drugs, pubmed] = await Promise.allSettled([
         getGenePPI(s), getGeneUniprot(s), getGeneDrugs(s), getGenePubmed(s),
       ])
       const drugPayload = drugs.status === 'fulfilled' ? drugs.value : null
       setData({
-        ppi: ppi.status === 'fulfilled' ? ppi.value : null,
-        uniprot: uniprot.status === 'fulfilled' ? uniprot.value : null,
-        drugs: Array.isArray(drugPayload) ? drugPayload : (drugPayload?.drugs ?? []),
-        exploratoryDrugs: Array.isArray(drugPayload) ? [] : (drugPayload?.exploratory_drugs ?? []),
+        ppi:                ppi.status === 'fulfilled' ? ppi.value : null,
+        uniprot:            uniprot.status === 'fulfilled' ? uniprot.value : null,
+        drugs:              Array.isArray(drugPayload) ? drugPayload : (drugPayload?.drugs ?? []),
+        exploratoryDrugs:   Array.isArray(drugPayload) ? [] : (drugPayload?.exploratory_drugs ?? []),
         targetActivityCount: Array.isArray(drugPayload) ? null : drugPayload?.target_activity_count,
-        drugNote: Array.isArray(drugPayload) ? '' : (drugPayload?.query_note ?? ''),
-        drugTargetFound: Array.isArray(drugPayload) ? null : drugPayload?.query_found_target,
-        pubmed: pubmed.status === 'fulfilled' ? pubmed.value : [],
+        drugNote:           Array.isArray(drugPayload) ? '' : (drugPayload?.query_note ?? ''),
+        drugTargetFound:    Array.isArray(drugPayload) ? null : drugPayload?.query_found_target,
+        pubmed:             pubmed.status === 'fulfilled' ? pubmed.value : [],
       })
     } catch (e) {
       setError(e.message)
@@ -90,10 +88,7 @@ export default function GeneLookupPage() {
     }
   }
 
-  useEffect(() => {
-    setData(null)
-    setError('')
-  }, [symbol])
+  useEffect(() => { setData(null); setError('') }, [symbol])
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -104,93 +99,82 @@ export default function GeneLookupPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] gap-6 items-end">
-        <div>
-          <p className="text-sm uppercase tracking-wide text-amber-400/80 mb-2">Gene Lookup</p>
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Inspect a target</h1>
-          <p className="text-sm text-white/70 max-w-xl leading-relaxed">
-            Query protein annotation, interaction partners, drug records, and PubMed abstracts for a single gene.
-          </p>
-        </div>
+    <div className="w-[90%] max-w-5xl mx-auto py-3 space-y-4">
 
-        <form onSubmit={handleSearch} className="glass-panel rounded-xl p-3">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              className="glass-input flex-1 rounded-lg px-4 py-3 text-sm font-medium"
-              placeholder="Gene symbol, e.g. EGFR"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              style={{ fontFamily: 'DM Sans, sans-serif' }}
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-6 py-3 rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? <Loader2 size={17} className="animate-spin" /> : <Search size={17} />}
-              Lookup
-            </button>
-          </div>
-        </form>
+      {/* Header + Search */}
+      <div className="pb-2 border-b border-slate-800">
+        <h1 className="text-base font-semibold text-white tracking-tight">Gene Lookup</h1>
+        <p className="text-xs text-slate-100 mt-0.5">Protein annotation, PPI partners, drug records, and PubMed abstracts.</p>
       </div>
 
-      {error && <div className="card border-red-700/40 text-red-300 text-sm">{error}</div>}
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <input
+          className="glass-input flex-1 rounded-none px-3 py-2 text-sm"
+          placeholder="Gene symbol — e.g. EGFR, TP53, KRAS"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-4 py-2 text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+          Lookup
+        </button>
+      </form>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
 
       {data && (
-        <div className="rounded-2xl border border-slate-600/70 bg-slate-950/90 p-4 sm:p-5 space-y-4 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.025)_inset]">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-lg border border-slate-600/70 bg-slate-800/80 px-4 py-3">
-              <p className="text-xs text-slate-300 uppercase tracking-wide font-semibold">Protein</p>
-              <p className="text-sm font-semibold text-white mt-1">
-                {data.uniprot?.protein_name || 'Not resolved'}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-600/70 bg-slate-800/80 px-4 py-3">
-              <p className="text-xs text-slate-300 uppercase tracking-wide font-semibold">ChEMBL</p>
-              <p className="text-sm font-semibold text-white mt-1">
-                {data.drugs.length} strong, {data.exploratoryDrugs.length} exploratory
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-600/70 bg-slate-800/80 px-4 py-3">
-              <p className="text-xs text-slate-300 uppercase tracking-wide font-semibold">PPI Partners</p>
-              <p className="text-sm font-semibold text-white mt-1">{data.ppi?.partners?.length ?? 0}</p>
-            </div>
-            <div className="rounded-lg border border-slate-600/70 bg-slate-800/80 px-4 py-3">
-              <p className="text-xs text-slate-300 uppercase tracking-wide font-semibold">PubMed Hits</p>
-              <p className="text-sm font-semibold text-white mt-1">{data.pubmed?.length ?? 0}</p>
-            </div>
+        <div className="space-y-3">
+
+          {/* Stats bar */}
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Protein',      value: data.uniprot?.protein_name || '—' },
+              { label: 'ChEMBL',       value: `${data.drugs.length} strong, ${data.exploratoryDrugs.length} exp.` },
+              { label: 'PPI Partners', value: data.ppi?.partners?.length ?? 0 },
+              { label: 'PubMed Hits',  value: data.pubmed?.length ?? 0 },
+            ].map(({ label, value }) => (
+              <div key={label} className="border border-slate-700 bg-[#0f1217] px-3 py-2">
+                <p className="text-[11px] text-slate-200 uppercase tracking-wide font-semibold">{label}</p>
+                <p className="text-xs font-semibold text-white mt-0.5 truncate">{value}</p>
+              </div>
+            ))}
           </div>
 
-          <div className="columns-1 lg:columns-2 gap-4">
+          {/* Detail panels */}
+          <div className="columns-1 lg:columns-2 gap-3">
+
             {/* UniProt */}
-            <div className="break-inside-avoid mb-4">
+            <div className="break-inside-avoid mb-3">
               <Section title="UniProt Annotation">
                 {data.uniprot ? (
-                  <div className="space-y-3 text-sm">
+                  <div className="space-y-2 text-xs">
                     <div className="flex justify-between gap-4">
-                      <span className="text-slate-300">Accession</span>
+                      <span className="text-slate-200">Accession</span>
                       <a
                         href={`https://www.uniprot.org/uniprotkb/${data.uniprot.accession}`}
                         target="_blank" rel="noopener noreferrer"
                         className="text-cyan-300 hover:text-white hover:underline flex items-center gap-1 font-semibold"
                       >
-                        {data.uniprot.accession} <ExternalLink size={11} />
+                        {data.uniprot.accession} <ExternalLink size={10} />
                       </a>
                     </div>
                     <div>
-                      <span className="text-slate-300">Protein</span>
-                      <p className="text-white text-sm mt-1">{data.uniprot.protein_name}</p>
+                      <span className="text-slate-200">Protein</span>
+                      <p className="text-white mt-0.5">{data.uniprot.protein_name}</p>
                     </div>
                     {data.uniprot.function && (
                       <div>
-                        <span className="text-slate-300">Function</span>
-                      <p className="text-slate-200 text-xs mt-1 leading-relaxed line-clamp-5">{data.uniprot.function}</p>
+                        <span className="text-slate-200">Function</span>
+                        <p className="text-slate-100 mt-0.5 leading-snug line-clamp-5">{data.uniprot.function}</p>
                       </div>
                     )}
                     {data.uniprot.pdb_ids?.length > 0 && (
                       <div>
-                        <span className="text-slate-300">PDB Structures</span>
+                        <span className="text-slate-200">PDB Structures</span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {data.uniprot.pdb_ids.map(id => (
                             <a
@@ -206,99 +190,89 @@ export default function GeneLookupPage() {
                       </div>
                     )}
                   </div>
-                ) : <p className="text-slate-300 text-sm">Not found in UniProt.</p>}
+                ) : <p className="text-slate-200 text-xs">Not found in UniProt.</p>}
               </Section>
             </div>
 
             {/* Drugs */}
-            <div className="break-inside-avoid mb-4">
+            <div className="break-inside-avoid mb-3">
               <Section title="ChEMBL Drug Interactions">
                 {data.drugs?.length > 0 ? (
-                  <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-300 font-semibold mb-2">Strong binding hits</p>
-                      <div className="space-y-3">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-200 font-semibold mb-1.5">Strong binding hits</p>
+                      <div className="space-y-2">
                         {data.drugs.slice(0, 8).map((d, i) => <ActivityRow key={i} drug={d} />)}
                       </div>
                     </div>
                     {data.exploratoryDrugs?.length > 0 && (
-                      <div className="border-t border-slate-600/70 pt-3">
-                        <p className="text-xs uppercase tracking-wide text-slate-300 font-semibold mb-2">
-                          Exploratory records
-                          {data.targetActivityCount ? ` (${data.targetActivityCount} target activities)` : ''}
+                      <div className="border-t border-slate-700/60 pt-2.5">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-200 font-semibold mb-1.5">
+                          Exploratory records{data.targetActivityCount ? ` (${data.targetActivityCount} target activities)` : ''}
                         </p>
-                        <div className="space-y-3">
-                          {data.exploratoryDrugs.slice(0, 5).map((d, i) => (
-                            <ActivityRow key={i} drug={d} muted />
-                          ))}
+                        <div className="space-y-2">
+                          {data.exploratoryDrugs.slice(0, 5).map((d, i) => <ActivityRow key={i} drug={d} muted />)}
                         </div>
                       </div>
                     )}
                   </div>
                 ) : data.exploratoryDrugs?.length > 0 ? (
-                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                    <p className="text-slate-300 text-sm">No strong binding hits passed the strict filter.</p>
-                    <div className="space-y-3">
-                      {data.exploratoryDrugs.slice(0, 8).map((d, i) => (
-                        <ActivityRow key={i} drug={d} />
-                      ))}
+                  <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                    <p className="text-slate-200 text-xs">No strong binding hits passed the strict filter.</p>
+                    <div className="space-y-2">
+                      {data.exploratoryDrugs.slice(0, 8).map((d, i) => <ActivityRow key={i} drug={d} />)}
                     </div>
-                    {data.drugNote && <p className="text-xs text-slate-300 leading-relaxed">{data.drugNote}</p>}
+                    {data.drugNote && <p className="text-[11px] text-slate-200 leading-snug">{data.drugNote}</p>}
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <p className="text-slate-300 text-sm">No drug interactions found in ChEMBL.</p>
-                    {data.drugNote && (
-                      <p className="text-xs text-slate-300 leading-relaxed">{data.drugNote}</p>
-                    )}
+                  <div className="space-y-1">
+                    <p className="text-slate-200 text-xs">No drug interactions found in ChEMBL.</p>
+                    {data.drugNote && <p className="text-[11px] text-slate-200 leading-snug">{data.drugNote}</p>}
                   </div>
                 )}
               </Section>
             </div>
 
             {/* PPI */}
-            <div className="break-inside-avoid mb-4">
+            <div className="break-inside-avoid mb-3">
               <Section title="STRING DB Interactions">
                 {data.ppi?.partners?.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <a
                       href={stringDbUrl(data.ppi.gene)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-300 hover:text-white hover:underline"
+                      target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-white hover:underline"
                     >
-                      Open {data.ppi.gene} in STRING DB <ExternalLink size={11} />
+                      Open {data.ppi.gene} in STRING DB <ExternalLink size={10} />
                     </a>
-                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-1 max-h-44 overflow-y-auto pr-1">
                       {data.ppi.partners.map((p, i) => (
                         <a
                           key={i}
                           href={stringDbUrl(p.partner)}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          target="_blank" rel="noopener noreferrer"
                           className={p.is_oncogene
-                          ? 'inline-flex items-center gap-1 rounded border border-red-500/60 bg-red-950/70 px-2.5 py-1 text-xs font-semibold text-red-200 hover:border-red-300 hover:text-white'
-                          : 'inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/80 px-2.5 py-1 text-xs font-semibold text-white/85 hover:border-cyan-400/70 hover:text-white'}
+                            ? 'inline-flex items-center gap-1 border border-red-500/60 bg-red-950/70 px-2 py-0.5 text-[11px] font-semibold text-red-200 hover:border-red-300 hover:text-white'
+                            : 'inline-flex items-center gap-1 border border-slate-700 bg-slate-800/60 px-2 py-0.5 text-[11px] font-semibold text-white/85 hover:border-cyan-400/70 hover:text-white'}
                           title={`STRING DB score: ${p.score}`}
                         >
-                          {p.partner}
-                          {p.is_oncogene && ' ⚠'}
+                          {p.partner}{p.is_oncogene && ' ⚠'}
                         </a>
                       ))}
                     </div>
                   </div>
-                ) : <p className="text-slate-300 text-sm">No interactions found.</p>}
-                {data.ppi?.error && <p className="text-xs text-red-300 mt-1">{data.ppi.error}</p>}
+                ) : <p className="text-slate-200 text-xs">No interactions found.</p>}
+                {data.ppi?.error && <p className="text-[11px] text-red-300 mt-1">{data.ppi.error}</p>}
               </Section>
             </div>
 
             {/* PubMed */}
-            <div className="break-inside-avoid mb-4">
+            <div className="break-inside-avoid mb-3">
               <Section title="PubMed Drug Literature">
                 {data.pubmed?.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-1">
                     {data.pubmed.map((a, i) => (
-                      <div key={i} className="text-xs border-l-2 border-gray-700 pl-3">
+                      <div key={i} className="text-xs border-l-2 border-slate-700 pl-2.5">
                         <a
                           href={`https://pubmed.ncbi.nlm.nih.gov/${a.pmid}/`}
                           target="_blank" rel="noopener noreferrer"
@@ -306,18 +280,19 @@ export default function GeneLookupPage() {
                         >
                           PMID: {a.pmid}
                         </a>
-                        <p className="text-slate-200 mt-1 line-clamp-3">{a.abstract}</p>
+                        <p className="text-slate-100 mt-0.5 line-clamp-3 leading-snug">{a.abstract}</p>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div>
-                    <p className="text-slate-300 text-sm">No drug-gene literature found.</p>
-                    <span className="badge-dark mt-2">Potential unstudied gene.</span>
+                    <p className="text-slate-200 text-xs">No drug-gene literature found.</p>
+                    <span className="badge-dark mt-1.5 inline-block">Potential unstudied gene.</span>
                   </div>
                 )}
               </Section>
             </div>
+
           </div>
         </div>
       )}
