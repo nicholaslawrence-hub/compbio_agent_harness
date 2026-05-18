@@ -318,6 +318,15 @@ function compactSentence(text, fallback = 'Maps state input to typed tool output
   return `${words.slice(0, 15).join(' ')}${words.length > 15 ? '.' : ''}`
 }
 
+function stripComments(code) {
+  return code
+    .split('\n')
+    .filter(line => !/^\s*#/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function highlightPython(code) {
   const tokenPattern = /#.*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:def|return|if|else|for|in|import|from|as|None|True|False|async|await|function|const|let)\b|\b(?:dict|list|str|int|float|AgentState|Path|File|FormData)\b|\b\d+\.?\d*\b|[A-Za-z_][A-Za-z0-9_]*(?=\()/g
   const lines = code.split('\n')
@@ -334,7 +343,7 @@ function highlightPython(code) {
       else if (token.startsWith('"') || token.startsWith("'")) className = 'text-[#ce9178]'
       else if (/^\d/.test(token)) className = 'text-[#b5cea8]'
       else if (/^(def|return|if|else|for|in|import|from|as|None|True|False|async|await|function|const|let)$/.test(token)) className = 'text-[#569cd6]'
-      else if (/^(dict|list|str|int|float|AgentState|Path|File|FormData)$/.test(token)) className = token === 'AgentState' ? 'text-purple-400' : 'text-[#4ec9b0]'
+      else if (/^(dict|list|str|int|float|AgentState|Path|File|FormData)$/.test(token)) className = 'text-[#4ec9b0]'
       else className = 'text-[#dcdcaa]'
       pieces.push(<span key={`${lineIndex}-${match.index}`} className={className}>{token}</span>)
       lastIndex = match.index + token.length
@@ -353,14 +362,12 @@ function CodeBlock({ code }) {
     setTimeout(() => setCopied(false), 1200)
   }
   return (
-    <div className="relative rounded border border-slate-600 bg-[#202732]">
-      <button type="button" onClick={copy} className="absolute right-2 top-2 grid h-7 w-7 place-items-center text-slate-300 hover:bg-slate-700 hover:text-white" aria-label={copied ? 'Copied' : 'Copy code'}>
+    <div className="relative rounded-md border border-slate-600/50 bg-[#1e2330]">
+      <button type="button" onClick={copy} className="absolute right-2 top-2 grid h-7 w-7 place-items-center text-slate-400 hover:text-slate-200 transition-colors" aria-label={copied ? 'Copied' : 'Copy'}>
         <Copy aria-hidden="true" size={14} strokeWidth={2} />
       </button>
-      <pre
-        className="overflow-auto p-4 pr-12 text-sm leading-6 text-slate-100 font-mono"
-      >
-        <code>{highlightPython(code)}</code>
+      <pre className="overflow-auto p-4 pr-12 text-sm leading-6 text-slate-100 font-mono">
+        <code>{highlightPython(stripComments(code))}</code>
       </pre>
     </div>
   )
@@ -368,7 +375,7 @@ function CodeBlock({ code }) {
 
 function AgentStateLink() {
   return (
-    <a href="#code" className="text-purple-400 underline decoration-purple-700 underline-offset-2 hover:text-purple-300">
+    <a href="#code" className="text-purple-400 hover:text-purple-300">
       AgentState
     </a>
   )
@@ -386,8 +393,8 @@ export default function ToolsPage() {
   const examples = examplesFor(active)
 
   return (
-    <div className="-mx-4 -my-6 grid min-h-[calc(100vh-4rem)] grid-cols-[14rem_minmax(0,1fr)] bg-[#15191f] sm:-mx-10 sm:-my-10">
-      <aside className="sticky left-0 top-16 z-30 h-[calc(100vh-4rem)] overflow-y-auto border-r border-slate-800 bg-slate-950 px-3 py-4 sm:top-20 sm:h-[calc(100vh-5rem)]">
+    <div className="-mx-4 -my-6 grid min-h-[calc(100vh-4rem)] grid-cols-[14rem_minmax(0,1fr)] bg-[#0f1217] sm:-mx-10 sm:-my-10">
+      <aside className="sticky left-0 top-16 z-30 h-[calc(100vh-4rem)] overflow-y-auto border-r border-slate-800 bg-[#0f1217] px-3 py-4 sm:top-20 sm:h-[calc(100vh-5rem)]">
         <div className="mb-3">
           <Link to="/sandbox" className="text-xs font-bold uppercase tracking-wide text-slate-500 hover:text-slate-200">Back</Link>
           <h1 className="mt-2 text-base font-bold text-slate-100">Tool Docs</h1>
@@ -428,7 +435,7 @@ export default function ToolsPage() {
         </nav>
       </aside>
 
-      <main className="min-h-[calc(100vh-4rem)] min-w-0 bg-[#15191f] px-8 py-5 font-sans text-slate-100">
+      <main className="min-h-[calc(100vh-4rem)] min-w-0 bg-[#0f1217] px-8 py-5 font-sans text-slate-100">
         <article className="max-w-5xl">
           <header className="pb-2">
             <h2 className="text-3xl font-semibold tracking-tight text-slate-100">{active.label}</h2>

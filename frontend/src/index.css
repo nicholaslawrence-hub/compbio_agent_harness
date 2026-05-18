@@ -13,7 +13,7 @@
     overflow-x: hidden;
   }
   code, pre {
-    font-family: 'DM Mono', monospace;
+    font-family: 'JetBrains Mono', 'DM Mono', ui-monospace, monospace;
   }
 }
 

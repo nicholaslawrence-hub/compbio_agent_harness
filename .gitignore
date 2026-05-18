@@ -15,6 +15,7 @@ dist/
 build/
 .pytest_cache/
 
+
 # Data (raw uploads, processed files — too large for git)
 data/raw/
 data/processed/
@@ -27,8 +28,10 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vercel/
 
-# Claude
+# Dev Agents
 .claude/
+.agents/
+skills-lock.json
 
 # IDE
 .vscode/
@@ -38,3 +41,4 @@ frontend/.vercel/
 # OS
 .DS_Store
 Thumbs.db
+
