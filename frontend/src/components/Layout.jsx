@@ -88,7 +88,14 @@ export default function Layout() {
                 }`
               }
             >
-              Tool Docs
+              {({ isActive }) => (
+                <>
+                  Tool Docs
+                  {isActive && (
+                    <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
+                  )}
+                </>
+              )}
             </NavLink>
 
             <NavLink
@@ -283,8 +290,7 @@ export default function Layout() {
             <div>
               <p className="text-sm uppercase tracking-wide text-white/60 mb-5">Account</p>
               <ul className="space-y-3.5">
-                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Log In</Link></li>
-                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Sign Up</Link></li>
+                <li><Link to="/login"   className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">Log In / Sign Up</Link></li>
                 <li><Link to="/account" className="text-base font-medium text-white hover:text-amber-400 transition-colors duration-150">My Account</Link></li>
               </ul>
             </div>
