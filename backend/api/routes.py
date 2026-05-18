@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from config import settings
-from agents.graph import get_pipeline
+from agents.graph import get_pipeline, NODE_IMPLS
 from agents.state import AgentState
 from agents.runtime import checkpoint_payload, load_checkpoint, register_artifact, save_checkpoint
 from db.ncbi import search_sra, fetch_pubmed_abstracts
@@ -24,7 +24,6 @@ from tools.ppi import get_ppi_network
 
 router = APIRouter()
 
-# In-memory job store (replace with Redis for production)
 _jobs: dict[str, dict] = {}
 
 
@@ -177,60 +176,51 @@ def _base_initial_state(
     }
 
 
+_RESULT_KEYS = (
+    "top_genes", "dge_results", "pathway_results", "enrichment_method",
+    "hypotheses", "final_report", "ppi_results", "drug_interactions",
+    "literature_results", "depmap_results", "opentargets_results",
+    "clinical_trials_results", "pathway_crosstalk_results", "evo2_fitness_results",
+    "esm3_design_results", "scenic_regulon_results", "spatial_tme_results",
+    "lincs_reversion_results", "tcga_survival_results", "pharmacogenomics_pgx_results",
+    "crispr_design_results", "alphafold_complex_results", "viper_protein_activity_results",
+    "mageck_crispr_results", "reinvent_generative_results", "gnina_docking_results",
+    "rdkit_feature_results", "routing_history", "prompt_payloads", "execution_events",
+    "network_topology", "node_outputs", "node_status", "artifact_registry",
+    "pending_tasks", "approval_requests", "provenance_ledger",
+)
+
+# Fields accumulated by appending (operator.add reducers in AgentState)
+_APPEND_KEYS = ("supervisor_context", "execution_events", "prompt_payloads", "routing_history", "provenance_ledger")
+# Fields overwritten by the latest node output
+_OVERWRITE_KEYS = ("node_outputs", "node_status", "artifact_registry", "pending_tasks", "approval_requests")
+
+
 async def _run_pipeline(job_id: str, state: AgentState):
     def _run_streaming():
-        """Run the graph with stream() so each node's status/progress is reflected live."""
         accumulated = {**state}
         topology = state.get("network_topology") or state.get("sandbox_config", {}).get("network_topology")
         for step in get_pipeline(topology).stream(state):
             for _node_name, node_out in step.items():
                 accumulated.update(node_out)
-                # Push live status + progress back to the job store the SSE stream reads
+                job = _jobs[job_id]
                 if node_out.get("status"):
-                    _jobs[job_id]["status"] = node_out["status"]
+                    job["status"] = node_out["status"]
                 if node_out.get("progress") is not None:
-                    _jobs[job_id]["progress"] = node_out["progress"]
+                    job["progress"] = node_out["progress"]
                 if node_out.get("errors"):
-                    _jobs[job_id].setdefault("errors", [])
-                    _jobs[job_id]["errors"] = list(
-                        set(_jobs[job_id]["errors"]) | set(node_out["errors"])
-                    )
-                # Stream supervisor reasoning + accumulated context to the SSE client
+                    job["errors"] = list(set(job.get("errors", [])) | set(node_out["errors"]))
                 if node_out.get("supervisor_reasoning"):
-                    _jobs[job_id]["supervisor_reasoning"] = node_out["supervisor_reasoning"]
-                if node_out.get("supervisor_context"):
-                    _jobs[job_id].setdefault("supervisor_context", [])
-                    # supervisor_context uses operator.add in state, so node_out only
-                    # contains the NEW entries appended by this node — accumulate them.
-                    _jobs[job_id]["supervisor_context"] = (
-                        _jobs[job_id]["supervisor_context"] + node_out["supervisor_context"]
-                    )
-                if node_out.get("execution_events"):
-                    _jobs[job_id].setdefault("execution_events", [])
-                    _jobs[job_id]["execution_events"] = (
-                        _jobs[job_id]["execution_events"] + node_out["execution_events"]
-                    )
-                if node_out.get("prompt_payloads"):
-                    _jobs[job_id].setdefault("prompt_payloads", [])
-                    _jobs[job_id]["prompt_payloads"] = (
-                        _jobs[job_id]["prompt_payloads"] + node_out["prompt_payloads"]
-                    )
-                if node_out.get("routing_history"):
-                    _jobs[job_id].setdefault("routing_history", [])
-                    _jobs[job_id]["routing_history"] = (
-                        _jobs[job_id]["routing_history"] + node_out["routing_history"]
-                    )
-                for key in ("node_outputs", "node_status", "artifact_registry", "pending_tasks", "approval_requests"):
+                    job["supervisor_reasoning"] = node_out["supervisor_reasoning"]
+                for key in _APPEND_KEYS:
                     if node_out.get(key):
-                        _jobs[job_id][key] = node_out[key]
-                if node_out.get("provenance_ledger"):
-                    _jobs[job_id].setdefault("provenance_ledger", [])
-                    _jobs[job_id]["provenance_ledger"] = (
-                        _jobs[job_id]["provenance_ledger"] + node_out["provenance_ledger"]
-                    )
+                        job[key] = job.get(key, []) + node_out[key]
+                for key in _OVERWRITE_KEYS:
+                    if node_out.get(key):
+                        job[key] = node_out[key]
                 latest_state = {**accumulated, **node_out}
-                _jobs[job_id]["latest_state"] = latest_state
-                _jobs[job_id]["checkpoint"] = save_checkpoint(job_id, latest_state)
+                job["latest_state"] = latest_state
+                job["checkpoint"] = save_checkpoint(job_id, latest_state)
         return accumulated
 
     try:
@@ -241,45 +231,7 @@ async def _run_pipeline(job_id: str, state: AgentState):
         _jobs[job_id].update({
             "status": final_status,
             "progress": 100,
-            "result": {
-                "top_genes": final_state.get("top_genes", []),
-                "dge_results": final_state.get("dge_results", []),
-                "pathway_results": final_state.get("pathway_results", []),
-                "enrichment_method": final_state.get("enrichment_method", ""),
-                "hypotheses": final_state.get("hypotheses", []),
-                "final_report": final_state.get("final_report", ""),
-                "ppi_results": final_state.get("ppi_results", []),
-                "drug_interactions": final_state.get("drug_interactions", []),
-                "literature_results": final_state.get("literature_results", []),
-                "depmap_results": final_state.get("depmap_results", []),
-                "opentargets_results": final_state.get("opentargets_results", []),
-                "clinical_trials_results": final_state.get("clinical_trials_results", []),
-                "pathway_crosstalk_results": final_state.get("pathway_crosstalk_results", []),
-                "evo2_fitness_results": final_state.get("evo2_fitness_results", []),
-                "esm3_design_results": final_state.get("esm3_design_results", []),
-                "scenic_regulon_results": final_state.get("scenic_regulon_results", []),
-                "spatial_tme_results": final_state.get("spatial_tme_results", []),
-                "lincs_reversion_results": final_state.get("lincs_reversion_results", []),
-                "tcga_survival_results": final_state.get("tcga_survival_results", []),
-                "pharmacogenomics_pgx_results": final_state.get("pharmacogenomics_pgx_results", []),
-                "crispr_design_results": final_state.get("crispr_design_results", []),
-                "alphafold_complex_results": final_state.get("alphafold_complex_results", []),
-                "viper_protein_activity_results": final_state.get("viper_protein_activity_results", []),
-                "mageck_crispr_results": final_state.get("mageck_crispr_results", []),
-                "reinvent_generative_results": final_state.get("reinvent_generative_results", []),
-                "gnina_docking_results": final_state.get("gnina_docking_results", []),
-                "rdkit_feature_results": final_state.get("rdkit_feature_results", []),
-                "routing_history": final_state.get("routing_history", []),
-                "prompt_payloads": final_state.get("prompt_payloads", []),
-                "execution_events": final_state.get("execution_events", []),
-                "network_topology": final_state.get("network_topology", {}),
-                "node_outputs": final_state.get("node_outputs", {}),
-                "node_status": final_state.get("node_status", {}),
-                "artifact_registry": final_state.get("artifact_registry", {}),
-                "pending_tasks": final_state.get("pending_tasks", {}),
-                "approval_requests": final_state.get("approval_requests", {}),
-                "provenance_ledger": final_state.get("provenance_ledger", []),
-            },
+            "result": {key: final_state.get(key) for key in _RESULT_KEYS},
             "errors": final_state.get("errors", []),
             "latest_state": final_state,
             "checkpoint": save_checkpoint(job_id, final_state),
@@ -500,43 +452,7 @@ async def start_sandbox_analysis(
         config["network_topology"] = topology
 
     allowed = set(config.get("allowed_agents", []))
-    valid = {
-        "study_context",
-        "count_matrix_input",
-        "clinical_metadata",
-        "run_dge",
-        "pathway_enrichment",
-        "supervisor",
-        "critic",
-        "sync_gateway",
-        "approval_gate",
-        "translator",
-        "enrich_ppi",
-        "literature_rag",
-        "drug_annotation",
-        "depmap_query",
-        "opentargets_query",
-        "clinical_trials",
-        "pathway_crosstalk",
-        "evo2_fitness",
-        "esm3_design",
-        "scenic_regulon",
-        "spatial_tme",
-        "lincs_reversion",
-        "tcga_survival",
-        "pharmacogenomics_pgx",
-        "crispr_designer",
-        "alphafold_complex",
-        "viper_protein_activity",
-        "mageck_crispr",
-        "reinvent_generative",
-        "gnina_docking",
-        "rdkit_features",
-        "critic_structural_tractability",
-        "critic_microenvironment_validity",
-        "critic_red_team_fda",
-        "report",
-    }
+    valid = set(NODE_IMPLS.keys()) | {"report"}
     config["allowed_agents"] = sorted(allowed & valid)
     if not config["allowed_agents"]:
         raise HTTPException(status_code=400, detail="Select at least one sandbox agent")

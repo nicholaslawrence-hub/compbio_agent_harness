@@ -345,76 +345,44 @@ def _report_node(state: AgentState) -> dict:
 
 # ── Default pipeline ──────────────────────────────────────────────────────────
 
-_DEFAULT_SUPERVISOR_TARGETS: set[str] = {
-    "enrich_ppi",
-    "literature_rag",
-    "drug_annotation",
-    "depmap_query",
-    "opentargets_query",
-    "clinical_trials",
-    "pathway_crosstalk",
-    "tcga_survival",
-    "crispr_designer",
-    "finalize",
-}
+# Specialists that loop back through supervisor; crispr_designer exits to synthesize directly
+_SPECIALISTS: tuple[str, ...] = (
+    "enrich_ppi", "literature_rag", "drug_annotation", "depmap_query",
+    "opentargets_query", "clinical_trials", "pathway_crosstalk", "tcga_survival",
+)
+_DEFAULT_SUPERVISOR_TARGETS: set[str] = {*_SPECIALISTS, "crispr_designer", "finalize"}
+
+_DEFAULT_GRAPH_NODES: list[tuple[str, Any]] = [
+    ("run_dge", node_run_dge),
+    ("dge_retry", node_dge_retry),
+    ("pathway_enrichment", node_pathway_enrichment),
+    ("supervisor", node_supervisor),
+    *((s, NODE_IMPLS[s]) for s in _SPECIALISTS),
+    ("crispr_designer", node_crispr_designer),
+    ("synthesize_hypotheses", node_synthesize_hypotheses),
+    ("generate_report", node_generate_report),
+]
 
 
 def build_default_graph():
     g = StateGraph(AgentState)
-
-    for name, fn in [
-        ("run_dge", node_run_dge),
-        ("dge_retry", node_dge_retry),
-        ("pathway_enrichment", node_pathway_enrichment),
-        ("supervisor", node_supervisor),
-        ("enrich_ppi", node_enrich_ppi),
-        ("literature_rag", node_literature_rag),
-        ("drug_annotation", node_drug_annotation),
-        ("depmap_query", node_depmap_query),
-        ("opentargets_query", node_opentargets_query),
-        ("clinical_trials", node_clinical_trials),
-        ("pathway_crosstalk", node_pathway_crosstalk),
-        ("tcga_survival", node_tcga_survival),
-        ("crispr_designer", node_crispr_designer),
-        ("synthesize_hypotheses", node_synthesize_hypotheses),
-        ("generate_report", node_generate_report),
-    ]:
+    for name, fn in _DEFAULT_GRAPH_NODES:
         g.add_node(name, _wrap_node(name, name, fn))
 
     g.add_edge(START, "run_dge")
     g.add_conditional_edges("run_dge", _route_after_dge, {
-        "dge_retry": "dge_retry",
-        "pathway_enrichment": "pathway_enrichment",
-        "end": END,
+        "dge_retry": "dge_retry", "pathway_enrichment": "pathway_enrichment", "end": END,
     })
     g.add_conditional_edges("dge_retry", _route_after_dge_retry, {
-        "pathway_enrichment": "pathway_enrichment",
-        "end": END,
+        "pathway_enrichment": "pathway_enrichment", "end": END,
     })
     g.add_edge("pathway_enrichment", "supervisor")
+    for s in _SPECIALISTS:
+        g.add_edge(s, "supervisor")
 
-    for specialist in (
-        "enrich_ppi", "literature_rag", "drug_annotation", "depmap_query",
-        "opentargets_query", "clinical_trials", "pathway_crosstalk", "tcga_survival",
-    ):
-        g.add_edge(specialist, "supervisor")
-
-    g.add_conditional_edges(
-        "supervisor",
-        _make_supervisor_router(_DEFAULT_SUPERVISOR_TARGETS),
-        {
-            "enrich_ppi": "enrich_ppi",
-            "literature_rag": "literature_rag",
-            "drug_annotation": "drug_annotation",
-            "depmap_query": "depmap_query",
-            "opentargets_query": "opentargets_query",
-            "clinical_trials": "clinical_trials",
-            "pathway_crosstalk": "pathway_crosstalk",
-            "tcga_survival": "tcga_survival",
-            "crispr_designer": "crispr_designer",
-            "finalize": "synthesize_hypotheses",
-        },
-    )
+    supervisor_routing = {s: s for s in _SPECIALISTS}
+    supervisor_routing.update({"crispr_designer": "crispr_designer", "finalize": "synthesize_hypotheses"})
+    g.add_conditional_edges("supervisor", _make_supervisor_router(_DEFAULT_SUPERVISOR_TARGETS), supervisor_routing)
     g.add_edge("crispr_designer", "synthesize_hypotheses")
     g.add_edge("synthesize_hypotheses", "generate_report")
     g.add_edge("generate_report", END)

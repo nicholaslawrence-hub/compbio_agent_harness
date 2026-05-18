@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     max_genes_for_rag: int = 10
     pubmed_max_results: int = 5
     llm_model: str = "gpt-5.4-mini"
-    llm_temperature: float = 0.5
+    llm_temperature: float = 0.0
 
     class Config:
         env_file = ".env"
