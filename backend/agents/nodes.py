@@ -1,6 +1,7 @@
 """LangGraph node functions for the PharmaGPT agent pipeline."""
 import json
 import math
+import re
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -98,7 +99,6 @@ Return JSON only:
                 SystemMessage(content="You are a cynical computational biology reviewer. Reject vague, irrelevant, or hallucinated evidence."),
                 HumanMessage(content=prompt),
             ])
-            import re
             match = re.search(r"\{.*\}", response.content, re.DOTALL)
             parsed = json.loads(match.group()) if match else {}
             decision = parsed.get("decision", "approve")
@@ -1326,7 +1326,6 @@ listed above, or choose finalize."""
             SystemMessage(content=_SUPERVISOR_PROMPT),
             HumanMessage(content=prompt),
         ])
-        import re
         match = re.search(r"\{.*\}", response.content, re.DOTALL)
         parsed = json.loads(match.group()) if match else {}
         next_step   = parsed.get("next_step", "finalize")
@@ -1436,69 +1435,6 @@ def _novelty_from_pub_count(pub_count: int) -> float:
         return 1.0
     return round(max(0.0, 1.0 - math.log10(max(1, pub_count)) / 4.0), 2)
 
-def node_synthesize_hypotheses(state: AgentState) -> dict:
-    """
-    LLM hypothesis synthesis driven entirely by the supervisor investigation log.
-
-    Generates one hypothesis per gene that survived supervisor pruning — no
-    hardcoded count. The supervisor_context already contains rich natural-language
-    summaries of PPI, DepMap, OpenTargets, literature, and drug findings from
-    every iteration, so we use that as the primary evidence rather than re-injecting
-    raw data structures.
-    """
-    llm         = _llm()
-    disease_term = state.get("disease_term", "")
-    # Use the pruned gene list — only generate hypotheses for surviving genes
-    top_genes   = state.get("top_genes", [])
-    sup_context = _format_supervisor_context(state)
-    dge_map     = {r["gene"]: r for r in state.get("dge_results", [])}
-    lit_map     = {r["gene"]: r for r in state.get("literature_results", []) if r}
-
-    hypotheses: list[dict] = []
-
-    # Fetch PubMed counts in parallel for all surviving genes
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        count_futures = {pool.submit(_get_pubmed_count, g): g for g in top_genes}
-        pub_counts    = {count_futures[f]: f.result() for f in as_completed(count_futures)}
-
-    for gene in top_genes:
-        dge_entry     = dge_map.get(gene, {})
-        lit_entry     = lit_map.get(gene, {})
-        pub_count     = pub_counts.get(gene, -1)
-        novelty_score = _novelty_from_pub_count(pub_count)
-        key_pmids     = lit_entry.get("key_pmids", [])
-
-        try:
-            prompt = _build_hypothesis_prompt(
-                gene,
-                dge_entry,
-                disease_term,
-                sup_context,
-                _format_study_context(state),
-                novelty_score,
-                pub_count,
-                key_pmids,
-            )
-            response = llm.invoke([
-                SystemMessage(content=_SYSTEM_PROMPT),
-                HumanMessage(content=prompt),
-            ])
-            hypothesis = _parse_hypothesis(response.content, gene, novelty_score, pub_count)
-            hypotheses.append(hypothesis)
-        except Exception as e:
-            hypotheses.append({
-                "gene":               gene,
-                "hypothesis":         f"Analysis failed: {str(e)}",
-                "mechanism":          "",
-                "novelty_score":      novelty_score,
-                "pub_count":          pub_count,
-                "supporting_evidence": [],
-                "key_pmids":          key_pmids,
-            })
-
-    return {"hypotheses": hypotheses, "status": "synthesis_complete", "progress": 90}
-
-
 def _format_pathways(pathway_results: list[dict]) -> str:
     if not pathway_results:
         return "No pathway enrichment results available."
@@ -1578,12 +1514,10 @@ Output ONLY valid JSON:
 
 
 def _parse_hypothesis(content: str, gene: str, novelty_score: float, pub_count: int) -> dict:
-    import re
     match = re.search(r"\{.*\}", content, re.DOTALL)
     if match:
         try:
             parsed = json.loads(match.group())
-            # Always enforce the pre-calculated novelty score — the LLM can't override it
             parsed["novelty_score"] = novelty_score
             parsed["pub_count"]     = pub_count
             parsed.setdefault("key_pmids", [])
@@ -1599,6 +1533,66 @@ def _parse_hypothesis(content: str, gene: str, novelty_score: float, pub_count: 
         "supporting_evidence": [],
         "key_pmids": [],
     }
+
+
+def node_synthesize_hypotheses(state: AgentState) -> dict:
+    """
+    LLM hypothesis synthesis driven entirely by the supervisor investigation log.
+
+    Generates one hypothesis per gene that survived supervisor pruning — no
+    hardcoded count. The supervisor_context already contains rich natural-language
+    summaries of PPI, DepMap, OpenTargets, literature, and drug findings from
+    every iteration, so we use that as the primary evidence rather than re-injecting
+    raw data structures.
+    """
+    llm         = _llm()
+    disease_term = state.get("disease_term", "")
+    top_genes   = state.get("top_genes", [])
+    sup_context = _format_supervisor_context(state)
+    dge_map     = {r["gene"]: r for r in state.get("dge_results", [])}
+    lit_map     = {r["gene"]: r for r in state.get("literature_results", []) if r}
+
+    hypotheses: list[dict] = []
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        count_futures = {pool.submit(_get_pubmed_count, g): g for g in top_genes}
+        pub_counts    = {count_futures[f]: f.result() for f in as_completed(count_futures)}
+
+    for gene in top_genes:
+        dge_entry     = dge_map.get(gene, {})
+        lit_entry     = lit_map.get(gene, {})
+        pub_count     = pub_counts.get(gene, -1)
+        novelty_score = _novelty_from_pub_count(pub_count)
+        key_pmids     = lit_entry.get("key_pmids", [])
+
+        try:
+            prompt = _build_hypothesis_prompt(
+                gene,
+                dge_entry,
+                disease_term,
+                sup_context,
+                _format_study_context(state),
+                novelty_score,
+                pub_count,
+                key_pmids,
+            )
+            response = llm.invoke([
+                SystemMessage(content=_SYSTEM_PROMPT),
+                HumanMessage(content=prompt),
+            ])
+            hypotheses.append(_parse_hypothesis(response.content, gene, novelty_score, pub_count))
+        except Exception as e:
+            hypotheses.append({
+                "gene":               gene,
+                "hypothesis":         f"Analysis failed: {str(e)}",
+                "mechanism":          "",
+                "novelty_score":      novelty_score,
+                "pub_count":          pub_count,
+                "supporting_evidence": [],
+                "key_pmids":          key_pmids,
+            })
+
+    return {"hypotheses": hypotheses, "status": "synthesis_complete", "progress": 90}
 
 
 # ── Node 6: Report generation ────────────────────────────────────────────────

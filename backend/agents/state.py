@@ -10,7 +10,6 @@ class DGEResult(TypedDict):
     pvalue: float
     padj: float
 
-
 class PPIResult(TypedDict):
     gene: str
     partners: list[dict]
@@ -21,7 +20,6 @@ class LiteratureResult(TypedDict):
     pubmed_hits: int
     abstracts: list[dict]
     is_dark: bool
-
 
 class PathwayResult(TypedDict):
     pathway: str

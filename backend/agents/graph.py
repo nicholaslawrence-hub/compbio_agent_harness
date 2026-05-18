@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Callable
 
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from agents.state import AgentState
 from agents.runtime import (
@@ -52,17 +52,21 @@ from agents.nodes import (
 def node_sync_gateway(state: AgentState) -> dict:
     """Explicit join node for branches that must both complete before advancing."""
     topology = state.get("network_topology", {}) or {}
-    current = state.get("active_node_id", "") or state.get("current_node_id", "")
+    current = state.get("current_node_id", "")
     incoming = [
         edge.get("source")
         for edge in topology.get("edges", [])
         if edge.get("target") == current
     ]
     node_status = state.get("node_status", {}) or {}
-    def _done(status: str | None) -> bool:
-        return bool(status) and status not in {"queued", "running", "pending_external_worker", "awaiting_approval", "sync_waiting"}
 
-    waiting = [node_id for node_id in incoming if not _done(node_status.get(node_id))]
+    def _done(status: str | None) -> bool:
+        return bool(status) and status not in {
+            "queued", "running", "pending_external_worker",
+            "awaiting_approval", "sync_waiting",
+        }
+
+    waiting = [nid for nid in incoming if not _done(node_status.get(nid))]
     return {
         "sync_ready": not waiting,
         "status": "sync_waiting" if waiting else "sync_complete",
@@ -77,7 +81,7 @@ def node_sync_gateway(state: AgentState) -> dict:
 
 def node_approval_gate(state: AgentState) -> dict:
     """Human approval breakpoint before expensive or irreversible work."""
-    node_id = state.get("active_node_id") or state.get("current_node_id") or "approval_gate"
+    node_id = state.get("current_node_id") or "approval_gate"
     existing = (state.get("approval_requests", {}) or {}).get(node_id, {})
     if existing.get("decision") in {"approved", "rejected"}:
         return {
@@ -159,6 +163,7 @@ ALIASES = {
     "exit_report": "generate_report",
 }
 
+# ── Routing helpers ───────────────────────────────────────────────────────────
 
 def _route_after_dge(state: AgentState) -> str:
     if state.get("status") == "dge_failed":
@@ -174,33 +179,63 @@ def _route_after_dge_retry(state: AgentState) -> str:
     return "pathway_enrichment"
 
 
-def _route_supervisor(state: AgentState) -> str:
-    next_step = state.get("next_step", "finalize")
-    valid = {
-        "enrich_ppi",
-        "literature_rag",
-        "drug_annotation",
-        "depmap_query",
-        "opentargets_query",
-        "clinical_trials",
-        "pathway_crosstalk",
-        "evo2_fitness",
-        "esm3_design",
-        "scenic_regulon",
-        "spatial_tme",
-        "lincs_reversion",
-        "tcga_survival",
-        "pharmacogenomics_pgx",
-        "crispr_designer",
-        "alphafold_complex",
-        "viper_protein_activity",
-        "mageck_crispr",
-        "reinvent_generative",
-        "gnina_docking",
-        "rdkit_features",
-        "finalize",
-    }
-    return next_step if next_step in valid else "finalize"
+def _make_supervisor_router(valid_targets: set[str]) -> Callable[[AgentState], str]:
+    """Return a supervisor router scoped to the given set of valid edge targets."""
+    def _route(state: AgentState) -> str:
+        next_step = state.get("next_step", "finalize")
+        return next_step if next_step in valid_targets else "finalize"
+    return _route
+
+
+# ── Node wrapper ──────────────────────────────────────────────────────────────
+
+_COMPLETE_STATUSES: frozenset[str] = frozenset({
+    "complete",
+    "completed",
+    "context_loaded",
+    "dge_complete",
+    "pathway_complete",
+    "ppi_complete",
+    "literature_complete",
+    "drug_annotation_complete",
+    "depmap_complete",
+    "opentargets_complete",
+    "clinical_trials_complete",
+    "pathway_crosstalk_complete",
+    "tcga_survival_complete",
+    "crispr_design_complete",
+    "hypotheses_complete",
+    "report_complete",
+    "sync_complete",
+    "external_complete",
+})
+
+_RESULT_KEYS: tuple[str, ...] = (
+    "top_genes",
+    "pathway_results",
+    "ppi_results",
+    "literature_results",
+    "drug_interactions",
+    "depmap_results",
+    "opentargets_results",
+    "clinical_trials_results",
+    "pathway_crosstalk_results",
+    "evo2_fitness_results",
+    "esm3_design_results",
+    "scenic_regulon_results",
+    "spatial_tme_results",
+    "lincs_reversion_results",
+    "tcga_survival_results",
+    "pharmacogenomics_pgx_results",
+    "crispr_design_results",
+    "alphafold_complex_results",
+    "viper_protein_activity_results",
+    "mageck_crispr_results",
+    "reinvent_generative_results",
+    "gnina_docking_results",
+    "rdkit_feature_results",
+    "hypotheses",
+)
 
 
 def _event_for(node_id: str, node_type: str, state: AgentState, out: dict) -> dict:
@@ -215,7 +250,6 @@ def _event_for(node_id: str, node_type: str, state: AgentState, out: dict) -> di
 
 
 def _payload_for(node_id: str, node_type: str, state: AgentState, out: dict) -> dict:
-    prompt = ""
     if node_type == "supervisor":
         prompt = state.get("supervisor_reasoning") or "Supervisor reviewed investigation history and selected the next node."
     elif node_type == "critic":
@@ -225,39 +259,7 @@ def _payload_for(node_id: str, node_type: str, state: AgentState, out: dict) -> 
     else:
         prompt = state.get("supervisor_subquery") or f"Run {node_type} on current top genes."
 
-    data_keys = [
-        key for key in (
-            "top_genes",
-            "pathway_results",
-            "ppi_results",
-            "literature_results",
-            "drug_interactions",
-            "depmap_results",
-            "opentargets_results",
-            "clinical_trials_results",
-            "pathway_crosstalk_results",
-            "evo2_fitness_results",
-            "esm3_design_results",
-            "scenic_regulon_results",
-            "spatial_tme_results",
-            "lincs_reversion_results",
-            "tcga_survival_results",
-            "pharmacogenomics_pgx_results",
-            "crispr_design_results",
-            "alphafold_complex_results",
-            "viper_protein_activity_results",
-            "mageck_crispr_results",
-            "reinvent_generative_results",
-            "gnina_docking_results",
-            "rdkit_feature_results",
-            "viper_protein_activity_results",
-            "mageck_crispr_results",
-            "reinvent_generative_results",
-            "gnina_docking_results",
-            "hypotheses",
-        )
-        if key in out
-    ]
+    data_keys = [key for key in _RESULT_KEYS if key in out]
     return {
         "node_id": node_id,
         "node_type": node_type,
@@ -267,32 +269,18 @@ def _payload_for(node_id: str, node_type: str, state: AgentState, out: dict) -> 
     }
 
 
+def _routing_entry(node_id: str, node_type: str, prev: str, status: str) -> dict:
+    return {"node_id": node_id, "node_type": node_type, "previous_node_id": prev, "status": status}
+
+
 def _wrap_node(node_id: str, node_type: str, fn: Callable[[AgentState], dict]) -> Callable[[AgentState], dict]:
     def _wrapped(state: AgentState) -> dict:
         state = {**state, "current_node_id": node_id}
+        prev = state.get("previous_node_id", "")
         existing_status = (state.get("node_status", {}) or {}).get(node_id)
-        complete_statuses = {
-            "complete",
-            "completed",
-            "context_loaded",
-            "dge_complete",
-            "pathway_complete",
-            "ppi_complete",
-            "literature_complete",
-            "drug_annotation_complete",
-            "depmap_complete",
-            "opentargets_complete",
-            "clinical_trials_complete",
-            "pathway_crosstalk_complete",
-            "tcga_survival_complete",
-            "crispr_design_complete",
-            "hypotheses_complete",
-            "report_complete",
-            "sync_complete",
-            "external_complete",
-        }
-        if existing_status in complete_statuses and node_type not in {"sync_gateway", "approval_gate"}:
-            output = {
+
+        if existing_status in _COMPLETE_STATUSES and node_type not in {"sync_gateway", "approval_gate"}:
+            out = {
                 "status": "skipped_completed",
                 "progress": state.get("progress", 0),
                 "supervisor_context": [{
@@ -301,24 +289,17 @@ def _wrap_node(node_id: str, node_type: str, fn: Callable[[AgentState], dict]) -
                     "summary": f"Skipped {node_id}; completed output was restored from checkpoint.",
                 }],
             }
-            event = _event_for(node_id, node_type, state, output)
-            payload = _payload_for(node_id, node_type, state, output)
-            scoped = scoped_patch(state, node_id, node_type, output)
             return {
-                **output,
-                **scoped,
+                **out,
+                **scoped_patch(state, node_id, node_type, out),
                 "previous_node_id": node_id,
-                "execution_events": [event],
-                "prompt_payloads": [payload],
-                "routing_history": [{
-                    "node_id": node_id,
-                    "node_type": node_type,
-                    "previous_node_id": state.get("previous_node_id", ""),
-                    "status": "skipped_completed",
-                }],
+                "execution_events": [_event_for(node_id, node_type, state, out)],
+                "prompt_payloads": [_payload_for(node_id, node_type, state, out)],
+                "routing_history": [_routing_entry(node_id, node_type, prev, "skipped_completed")],
             }
+
         if node_type in HEAVY_NODE_TYPES and existing_status != "external_complete":
-            output = {
+            out = {
                 "status": "pending_external_worker",
                 "progress": state.get("progress", 0),
                 "supervisor_context": [{
@@ -328,44 +309,29 @@ def _wrap_node(node_id: str, node_type: str, fn: Callable[[AgentState], dict]) -
                 }],
             }
             pending = dispatch_external_task(state, node_id, node_type)
-            event = _event_for(node_id, node_type, state, output)
+            event = _event_for(node_id, node_type, state, out)
             event["task"] = pending["pending_tasks"][node_id]
-            payload = _payload_for(node_id, node_type, state, output)
-            scoped = scoped_patch(state, node_id, node_type, {**output, **pending})
-            provenance = provenance_event(node_id, node_type, state, output)
             return {
-                **output,
+                **out,
                 **pending,
-                **scoped,
+                **scoped_patch(state, node_id, node_type, {**out, **pending}),
                 "previous_node_id": node_id,
                 "execution_events": [event],
-                "prompt_payloads": [payload],
-                "provenance_ledger": [provenance],
-                "routing_history": [{
-                    "node_id": node_id,
-                    "node_type": node_type,
-                    "previous_node_id": state.get("previous_node_id", ""),
-                    "status": "pending_external_worker",
-                }],
+                "prompt_payloads": [_payload_for(node_id, node_type, state, out)],
+                "provenance_ledger": [provenance_event(node_id, node_type, state, out)],
+                "routing_history": [_routing_entry(node_id, node_type, prev, "pending_external_worker")],
             }
+
         out = fn(state)
         event = _event_for(node_id, node_type, state, out)
-        payload = _payload_for(node_id, node_type, state, out)
-        scoped = scoped_patch(state, node_id, node_type, out)
-        provenance = provenance_event(node_id, node_type, state, out)
         return {
             **out,
-            **scoped,
+            **scoped_patch(state, node_id, node_type, out),
             "previous_node_id": node_id,
             "execution_events": [event],
-            "prompt_payloads": [payload],
-            "provenance_ledger": [provenance],
-            "routing_history": [{
-                "node_id": node_id,
-                "node_type": node_type,
-                "previous_node_id": state.get("previous_node_id", ""),
-                "status": event["status"],
-            }],
+            "prompt_payloads": [_payload_for(node_id, node_type, state, out)],
+            "provenance_ledger": [provenance_event(node_id, node_type, state, out)],
+            "routing_history": [_routing_entry(node_id, node_type, prev, event["status"])],
         }
 
     return _wrapped
@@ -373,31 +339,49 @@ def _wrap_node(node_id: str, node_type: str, fn: Callable[[AgentState], dict]) -
 
 def _report_node(state: AgentState) -> dict:
     synthesis = node_synthesize_hypotheses(state)
-    merged = {**state, **synthesis}
-    report = node_generate_report(merged)
+    report = node_generate_report({**state, **synthesis})
     return {**synthesis, **report}
+
+
+# ── Default pipeline ──────────────────────────────────────────────────────────
+
+_DEFAULT_SUPERVISOR_TARGETS: set[str] = {
+    "enrich_ppi",
+    "literature_rag",
+    "drug_annotation",
+    "depmap_query",
+    "opentargets_query",
+    "clinical_trials",
+    "pathway_crosstalk",
+    "tcga_survival",
+    "crispr_designer",
+    "finalize",
+}
 
 
 def build_default_graph():
     g = StateGraph(AgentState)
 
-    g.add_node("run_dge", _wrap_node("run_dge", "run_dge", node_run_dge))
-    g.add_node("dge_retry", _wrap_node("dge_retry", "dge_retry", node_dge_retry))
-    g.add_node("pathway_enrichment", _wrap_node("pathway_enrichment", "pathway_enrichment", node_pathway_enrichment))
-    g.add_node("supervisor", _wrap_node("supervisor", "supervisor", node_supervisor))
-    g.add_node("enrich_ppi", _wrap_node("enrich_ppi", "enrich_ppi", node_enrich_ppi))
-    g.add_node("literature_rag", _wrap_node("literature_rag", "literature_rag", node_literature_rag))
-    g.add_node("drug_annotation", _wrap_node("drug_annotation", "drug_annotation", node_drug_annotation))
-    g.add_node("depmap_query", _wrap_node("depmap_query", "depmap_query", node_depmap_query))
-    g.add_node("opentargets_query", _wrap_node("opentargets_query", "opentargets_query", node_opentargets_query))
-    g.add_node("clinical_trials", _wrap_node("clinical_trials", "clinical_trials", node_clinical_trials))
-    g.add_node("pathway_crosstalk", _wrap_node("pathway_crosstalk", "pathway_crosstalk", node_pathway_crosstalk))
-    g.add_node("tcga_survival", _wrap_node("tcga_survival", "tcga_survival", node_tcga_survival))
-    g.add_node("crispr_designer", _wrap_node("crispr_designer", "crispr_designer", node_crispr_designer))
-    g.add_node("synthesize_hypotheses", _wrap_node("synthesize_hypotheses", "synthesize_hypotheses", node_synthesize_hypotheses))
-    g.add_node("generate_report", _wrap_node("generate_report", "generate_report", node_generate_report))
+    for name, fn in [
+        ("run_dge", node_run_dge),
+        ("dge_retry", node_dge_retry),
+        ("pathway_enrichment", node_pathway_enrichment),
+        ("supervisor", node_supervisor),
+        ("enrich_ppi", node_enrich_ppi),
+        ("literature_rag", node_literature_rag),
+        ("drug_annotation", node_drug_annotation),
+        ("depmap_query", node_depmap_query),
+        ("opentargets_query", node_opentargets_query),
+        ("clinical_trials", node_clinical_trials),
+        ("pathway_crosstalk", node_pathway_crosstalk),
+        ("tcga_survival", node_tcga_survival),
+        ("crispr_designer", node_crispr_designer),
+        ("synthesize_hypotheses", node_synthesize_hypotheses),
+        ("generate_report", node_generate_report),
+    ]:
+        g.add_node(name, _wrap_node(name, name, fn))
 
-    g.set_entry_point("run_dge")
+    g.add_edge(START, "run_dge")
     g.add_conditional_edges("run_dge", _route_after_dge, {
         "dge_retry": "dge_retry",
         "pathway_enrichment": "pathway_enrichment",
@@ -408,31 +392,36 @@ def build_default_graph():
         "end": END,
     })
     g.add_edge("pathway_enrichment", "supervisor")
-    g.add_edge("enrich_ppi", "supervisor")
-    g.add_edge("literature_rag", "supervisor")
-    g.add_edge("drug_annotation", "supervisor")
-    g.add_edge("depmap_query", "supervisor")
-    g.add_edge("opentargets_query", "supervisor")
-    g.add_edge("clinical_trials", "supervisor")
-    g.add_edge("pathway_crosstalk", "supervisor")
-    g.add_edge("tcga_survival", "supervisor")
-    g.add_conditional_edges("supervisor", _route_supervisor, {
-        "enrich_ppi": "enrich_ppi",
-        "literature_rag": "literature_rag",
-        "drug_annotation": "drug_annotation",
-        "depmap_query": "depmap_query",
-        "opentargets_query": "opentargets_query",
-        "clinical_trials": "clinical_trials",
-        "pathway_crosstalk": "pathway_crosstalk",
-        "tcga_survival": "tcga_survival",
-        "crispr_designer": "crispr_designer",
-        "finalize": "synthesize_hypotheses",
-    })
+
+    for specialist in (
+        "enrich_ppi", "literature_rag", "drug_annotation", "depmap_query",
+        "opentargets_query", "clinical_trials", "pathway_crosstalk", "tcga_survival",
+    ):
+        g.add_edge(specialist, "supervisor")
+
+    g.add_conditional_edges(
+        "supervisor",
+        _make_supervisor_router(_DEFAULT_SUPERVISOR_TARGETS),
+        {
+            "enrich_ppi": "enrich_ppi",
+            "literature_rag": "literature_rag",
+            "drug_annotation": "drug_annotation",
+            "depmap_query": "depmap_query",
+            "opentargets_query": "opentargets_query",
+            "clinical_trials": "clinical_trials",
+            "pathway_crosstalk": "pathway_crosstalk",
+            "tcga_survival": "tcga_survival",
+            "crispr_designer": "crispr_designer",
+            "finalize": "synthesize_hypotheses",
+        },
+    )
     g.add_edge("crispr_designer", "synthesize_hypotheses")
     g.add_edge("synthesize_hypotheses", "generate_report")
     g.add_edge("generate_report", END)
     return g.compile()
 
+
+# ── Visual-builder pipeline ───────────────────────────────────────────────────
 
 def _clean_topology(topology: dict[str, Any]) -> tuple[list[dict], list[dict]]:
     nodes = [node for node in topology.get("nodes", []) if node.get("id") and node.get("type")]
@@ -474,65 +463,67 @@ def build_graph(topology: dict[str, Any] | None = None):
     known_node_ids: set[str] = set()
     for node in nodes:
         node_type = ALIASES.get(node["type"], node["type"])
-        if node["type"] in {"report", "exit_report"}:
-            fn = _report_node
-        else:
-            fn = NODE_IMPLS.get(node_type)
+        fn = _report_node if node["type"] in {"report", "exit_report"} else NODE_IMPLS.get(node_type)
         if fn is None:
             continue
         g.add_node(node["id"], _wrap_node(node["id"], node["type"], fn))
         known_node_ids.add(node["id"])
 
     graph_nodes = [node for node in nodes if node["id"] in known_node_ids]
-    g.set_entry_point(_entry_node(graph_nodes, incoming))
+    g.add_edge(START, _entry_node(graph_nodes, incoming))
+
+    _skip_static_edge_types = {"supervisor", "critic"} | set(HEAVY_NODE_TYPES)
 
     for edge in edges:
         if edge["source"] not in known_node_ids or edge["target"] not in known_node_ids:
             continue
-        source = by_id[edge["source"]]
-        source_type = source["type"]
-        if source_type in {"supervisor", "critic"} or source_type.startswith("critic_"):
+        source_type = by_id[edge["source"]]["type"]
+        if source_type in _skip_static_edge_types or source_type.startswith("critic_"):
             continue
-        if source_type in {"sync_gateway", "approval_gate"} or source_type in HEAVY_NODE_TYPES:
+        if source_type in {"sync_gateway", "approval_gate"}:
             continue
         if (edge.get("data") or {}).get("edgeType") in {"conditional", "reject", "agentic"}:
             continue
-        if edge["target"] in by_id:
-            g.add_edge(edge["source"], edge["target"])
+        g.add_edge(edge["source"], edge["target"])
 
     for node in nodes:
         node_id = node["id"]
         if node_id not in known_node_ids:
             continue
         node_type = node["type"]
-        targets = [target for target in outgoing.get(node_id, []) if target in by_id and target in known_node_ids]
+        targets = [t for t in outgoing.get(node_id, []) if t in known_node_ids]
 
         if node_type == "supervisor" and targets:
-            type_to_target = {by_id[target]["type"]: target for target in targets}
+            type_to_target = {by_id[t]["type"]: t for t in targets}
             fallback = targets[0]
 
-            def _route_dynamic_supervisor(state: AgentState, mapping=type_to_target, fallback_target=fallback) -> str:
+            def _route_dynamic_supervisor(state: AgentState, mapping=type_to_target, fb=fallback) -> str:
                 if state.get("next_step") == "finalize":
-                    return mapping.get("report") or mapping.get("exit_report") or fallback_target
-                return mapping.get(state.get("next_step", ""), fallback_target)
+                    return mapping.get("report") or mapping.get("exit_report") or fb
+                return mapping.get(state.get("next_step", ""), fb)
 
-            g.add_conditional_edges(node_id, _route_dynamic_supervisor, {
-                target: target for target in targets
-            })
+            g.add_conditional_edges(node_id, _route_dynamic_supervisor, {t: t for t in targets})
 
         elif (node_type == "critic" or node_type.startswith("critic_")) and targets:
-            retry_candidates = [source for source in incoming.get(node_id, []) if source in by_id and by_id[source]["type"] != "supervisor"]
+            retry_candidates = [s for s in incoming.get(node_id, []) if s in by_id and by_id[s]["type"] != "supervisor"]
             retry_target = retry_candidates[-1] if retry_candidates else targets[0]
             forward_target = targets[0]
-            kill_target = next((target for target in targets if by_id[target]["type"] in {"report", "exit_report"}), forward_target)
+            kill_target = next(
+                (t for t in targets if by_id[t]["type"] in {"report", "exit_report"}),
+                forward_target,
+            )
 
             def _route_critic(state: AgentState, retry=retry_target, forward=forward_target, kill=kill_target) -> str:
-                if state.get("critic_route") == "kill":
+                route = state.get("critic_route")
+                if route == "kill":
                     return kill
-                return retry if state.get("critic_route") == "retry" else forward
+                return retry if route == "retry" else forward
 
-            route_map = {retry_target: retry_target, forward_target: forward_target, kill_target: kill_target}
-            g.add_conditional_edges(node_id, _route_critic, route_map)
+            g.add_conditional_edges(node_id, _route_critic, {
+                retry_target: retry_target,
+                forward_target: forward_target,
+                kill_target: kill_target,
+            })
 
         elif node_type == "sync_gateway" and targets:
             forward_target = targets[0]
@@ -548,14 +539,15 @@ def build_graph(topology: dict[str, Any] | None = None):
         elif node_type == "approval_gate" and targets:
             forward_target = targets[0]
             reject_targets = [
-                target for target in targets
-                if (next((edge for edge in edges if edge["source"] == node_id and edge["target"] == target), {}).get("data") or {}).get("edgeType") == "reject"
+                t for t in targets
+                if (next(
+                    (e for e in edges if e["source"] == node_id and e["target"] == t), {}
+                ).get("data") or {}).get("edgeType") == "reject"
             ]
             reject_target = reject_targets[0] if reject_targets else "__end__"
 
             def _route_approval(state: AgentState, current=node_id, forward=forward_target, reject=reject_target) -> str:
-                requests = state.get("approval_requests", {}) or {}
-                decision = requests.get(current, {}).get("decision")
+                decision = (state.get("approval_requests", {}) or {}).get(current, {}).get("decision")
                 if decision == "approved":
                     return forward
                 if decision == "rejected":
@@ -579,25 +571,30 @@ def build_graph(topology: dict[str, Any] | None = None):
                 "__end__": END,
             })
 
-        elif targets and any((edge.get("data") or {}).get("edgeType") in {"conditional", "reject", "agentic"} for edge in edges if edge["source"] == node_id):
-            conditional_edges = [edge for edge in edges if edge["source"] == node_id and edge["target"] in targets]
+        elif targets and any(
+            (e.get("data") or {}).get("edgeType") in {"conditional", "reject", "agentic"}
+            for e in edges if e["source"] == node_id
+        ):
+            conditional_edges = [e for e in edges if e["source"] == node_id and e["target"] in targets]
             default_target = next(
-                (edge["target"] for edge in conditional_edges if (edge.get("data") or {}).get("edgeType") != "reject"),
+                (e["target"] for e in conditional_edges if (e.get("data") or {}).get("edgeType") != "reject"),
                 targets[0],
             )
-            route_map = {edge["target"]: edge["target"] for edge in conditional_edges}
+            route_map = {e["target"]: e["target"] for e in conditional_edges}
 
-            def _route_custom_conditional(state: AgentState, current=node_id, fallback=default_target, allowed=route_map) -> str:
+            def _route_custom(state: AgentState, current=node_id, fallback=default_target, allowed=route_map) -> str:
                 decision = (state.get("edge_decisions", {}) or {}).get(current)
                 return decision if decision in allowed else fallback
 
-            g.add_conditional_edges(node_id, _route_custom_conditional, route_map)
+            g.add_conditional_edges(node_id, _route_custom, route_map)
 
         elif not targets:
             g.add_edge(node_id, END)
 
     return g.compile()
 
+
+# ── Public entry point ────────────────────────────────────────────────────────
 
 _pipeline = None
 

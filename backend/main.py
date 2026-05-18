@@ -40,7 +40,7 @@ app.include_router(oauth_router, prefix="/api/v1")
 
 
 def _migrate_db():
-    """Idempotently add OAuth columns to existing databases."""
+    """Add OAuth columns to existing databases."""
     from sqlalchemy import text
     from db.database import engine
     dialect = engine.dialect.name
