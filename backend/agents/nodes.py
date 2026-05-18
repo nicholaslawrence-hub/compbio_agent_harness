@@ -1249,10 +1249,10 @@ def _sandbox_settings(state: AgentState) -> tuple[set[str], int, str]:
         allowed_steps = all_steps
 
     try:
-        max_iterations = int(config.get("max_iterations", 8))
+        max_iterations = int(config.get("max_iterations", 12))
     except (TypeError, ValueError):
-        max_iterations = 8
-    max_iterations = max(1, min(8, max_iterations))
+        max_iterations = 12
+    max_iterations = max(1, min(12, max_iterations))
 
     directive = str(config.get("directive", "")).strip()
     return allowed_steps, max_iterations, directive
@@ -1449,6 +1449,122 @@ def _format_pathways(pathway_results: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_clinical_trials_for_gene(gene: str, ct_results: list[dict]) -> str:
+    entry = next((r for r in ct_results if r.get("gene") == gene), None)
+    if not entry or entry.get("status") == "error":
+        return "No clinical trial data retrieved."
+    trials = entry.get("trials", [])
+    if not trials:
+        return f"  {entry.get('trial_count_returned', 0)} trials found for '{entry.get('query', gene)}' — none returned."
+    lines = [f"  {entry.get('trial_count_returned', len(trials))} trials for '{entry.get('query', gene)}'"]
+    for t in trials[:4]:
+        lines.append(f"  [{t.get('nct_id', '?')}] {t.get('brief_title', '?')} — {t.get('overall_status', '?')}")
+    return "\n".join(lines)
+
+
+def _format_tcga_for_gene(gene: str, tcga_results: list[dict]) -> str:
+    entry = next((r for r in tcga_results if r.get("gene") == gene), None)
+    if not entry or entry.get("source") == "stub":
+        return "No TCGA survival data (stub)."
+    return (
+        f"  cohort={entry.get('cohort', '?')}  "
+        f"KM_p={entry.get('kaplan_meier_p', '?')}  "
+        f"direction={entry.get('hazard_direction', '?')}"
+    )
+
+
+def _format_alphafold_for_gene(gene: str, af_results: list[dict]) -> str:
+    entry = next((r for r in af_results if r.get("gene") == gene), None)
+    if not entry:
+        return "No AlphaFold data retrieved."
+    if entry.get("status") != "resolved":
+        return f"  AlphaFold: not resolved ({entry.get('error', 'no entry in DB')})"
+    return (
+        f"  UniProt={entry.get('uniprot_id', '?')}  "
+        f"pLDDT={entry.get('plddt_mean', '?')}  "
+        f"url={entry.get('pdb_url', entry.get('cif_url', 'N/A'))}"
+    )
+
+
+def _format_crosstalk(crosstalk_results: list[dict]) -> str:
+    if not crosstalk_results:
+        return "No pathway crosstalk data."
+    r = crosstalk_results[0]
+    pathways = ", ".join(r.get("pathways", []))
+    bridges  = ", ".join(r.get("bridge_genes", []))
+    return f"  pathways=[{pathways}]\n  bridge_genes=[{bridges}]"
+
+
+def _format_ppi_for_gene(gene: str, ppi_results: list[dict]) -> str:
+    entry = next((r for r in ppi_results if r.get("gene") == gene), None)
+    if not entry or not entry.get("partners"):
+        return "No PPI data retrieved."
+    lines = []
+    for p in entry["partners"][:12]:
+        score = p.get("combined_score") or p.get("score", "?")
+        go    = ", ".join(p.get("go_terms", [])[:3])
+        lines.append(f"  {p.get('partner', p.get('symbol', '?'))} (score={score}){f' — {go}' if go else ''}")
+    return "\n".join(lines)
+
+
+def _format_depmap_for_gene(gene: str, depmap_results: list[dict]) -> str:
+    entry = next((r for r in depmap_results if r.get("gene") == gene), None)
+    if not entry or entry.get("error"):
+        return "No DepMap data retrieved."
+    return (
+        f"  mean_chronos={entry.get('mean_chronos', 'N/A')}  "
+        f"percent_dependent={entry.get('percent_dependent', 'N/A')}%  "
+        f"common_essential={entry.get('is_common_essential', False)}  "
+        f"strongly_selective={entry.get('is_strongly_selective', False)}\n"
+        f"  top lineages: {', '.join(entry.get('top_lineages', [])[:5])}"
+    )
+
+
+def _format_ot_for_gene(gene: str, ot_results: list[dict]) -> str:
+    entry = next((r for r in ot_results if r.get("gene") == gene), None)
+    if not entry or entry.get("error"):
+        return "No OpenTargets data retrieved."
+    return (
+        f"  overall={entry.get('overall_score', 'N/A'):.3f}  "
+        f"genetic_assoc={entry.get('genetic_association', 0):.3f}  "
+        f"somatic_mut={entry.get('somatic_mutation', 0):.3f}  "
+        f"known_drug={entry.get('known_drug', 0):.3f}  "
+        f"rna_expr={entry.get('rna_expression', 0):.3f}"
+    )
+
+
+def _format_drugs_for_gene(gene: str, drug_interactions: list[dict]) -> str:
+    entry = next((r for r in drug_interactions if r.get("gene") == gene), None)
+    if not entry:
+        return "No drug annotation data retrieved."
+    drugs = entry.get("drugs", [])
+    uniprot = entry.get("uniprot") or {}
+    lines = []
+    if uniprot:
+        lines.append(f"  UniProt: {uniprot.get('protein_name', '')} | function: {str(uniprot.get('function', ''))[:200]}")
+    if not drugs:
+        lines.append("  No ChEMBL compounds found — no approved or investigational drugs targeting this protein.")
+    for d in drugs[:6]:
+        lines.append(
+            f"  {d.get('molecule_name', '?')} — max_phase={d.get('max_phase', '?')} "
+            f"pchembl={d.get('pchembl_value', '?')} moa={d.get('mechanism_of_action', '?')}"
+        )
+    return "\n".join(lines)
+
+
+def _format_literature_for_gene(gene: str, lit_results: list[dict]) -> str:
+    entry = next((r for r in lit_results if r.get("gene") == gene), None)
+    if not entry:
+        return "No literature data retrieved."
+    abstracts = entry.get("abstracts", [])[:4]
+    lines = [f"  PubMed hits: {entry.get('pubmed_hits', 0)}  dark_gene={entry.get('is_dark', False)}"]
+    for a in abstracts:
+        title = a.get("title", "")[:120]
+        pmid  = a.get("pmid", "")
+        lines.append(f"  [{pmid}] {title}")
+    return "\n".join(lines)
+
+
 def _build_hypothesis_prompt(
     gene: str,
     dge_entry: dict,
@@ -1458,12 +1574,33 @@ def _build_hypothesis_prompt(
     novelty_score: float,
     pub_count: int,
     key_pmids: list,
+    ppi_results: list[dict] | None = None,
+    depmap_results: list[dict] | None = None,
+    ot_results: list[dict] | None = None,
+    drug_interactions: list[dict] | None = None,
+    lit_results: list[dict] | None = None,
+    pathway_results: list[dict] | None = None,
+    ct_results: list[dict] | None = None,
+    tcga_results: list[dict] | None = None,
+    af_results: list[dict] | None = None,
+    crosstalk_results: list[dict] | None = None,
 ) -> str:
     lfc_raw = dge_entry.get("log2FoldChange", "N/A")
     padj    = dge_entry.get("padj", "N/A")
     lfc     = f"{lfc_raw:.3f}" if isinstance(lfc_raw, float) else str(lfc_raw)
     pub_str = str(pub_count) if pub_count >= 0 else "unknown"
     disease = disease_term.strip() or "the disease"
+
+    ppi_block        = _format_ppi_for_gene(gene, ppi_results or [])
+    depmap_block     = _format_depmap_for_gene(gene, depmap_results or [])
+    ot_block         = _format_ot_for_gene(gene, ot_results or [])
+    drug_block       = _format_drugs_for_gene(gene, drug_interactions or [])
+    lit_block        = _format_literature_for_gene(gene, lit_results or [])
+    path_block       = _format_pathways(pathway_results or [])
+    ct_block         = _format_clinical_trials_for_gene(gene, ct_results or [])
+    tcga_block       = _format_tcga_for_gene(gene, tcga_results or [])
+    af_block         = _format_alphafold_for_gene(gene, af_results or [])
+    crosstalk_block  = _format_crosstalk(crosstalk_results or [])
 
     return f"""
 Analyze gene **{gene}** as a potential therapeutic target in **{disease}**.
@@ -1476,38 +1613,63 @@ novelty_score = {novelty_score}
 PubMed cancer hits: {pub_str}
 
 ## User-Provided Study Context
-Use this only when it is relevant to {gene}. Do not force it into the brief.
-
 {study_context}
 
-## Agent Network Investigation (primary evidence — this is the full picture; weight it heavily)
-The supervisor directed specialist agents across multiple rounds. All PPI network data,
-DepMap essentiality scores, OpenTargets disease associations, literature findings, and
-drug annotation results are captured in the log below:
+## PPI Network (STRING, combined_score >= 700)
+{ppi_block}
 
-{supervisor_context if supervisor_context else "No investigation data available — use general biological knowledge."}
+## DepMap Cancer Dependency
+{depmap_block}
+
+## OpenTargets Disease Association
+{ot_block}
+
+## Drug Annotation (UniProt + ChEMBL)
+{drug_block}
+
+## Literature (PubMed + RAG)
+{lit_block}
+
+## Pathway Enrichment
+{path_block}
+
+## Pathway Crosstalk & Bridge Genes
+{crosstalk_block}
+
+## Clinical Trials
+{ct_block}
+
+## TCGA Survival
+{tcga_block}
+
+## AlphaFold Structure
+{af_block}
+
+## Supervisor Investigation Log (agent reasoning across all rounds)
+{supervisor_context if supervisor_context else "No investigation log available."}
 
 ## Task
 Write a discovery brief for **{gene}** in **{disease}** that a medicinal chemist or grant
 reviewer finds compelling. Lead with what is surprising or distinctive about this gene
-based on the investigation above. Do not open with "{gene} is upregulated X-fold." Find an angle.
+based on the data above. Do not open with "{gene} is upregulated X-fold." Find an angle.
 
-MECHANISM: Name at least 2 specific proteins from the PPI findings above. Describe the exact
-molecular event — phosphorylation site, complex assembled/dissociated, transcriptional target.
-Never write "activates downstream signaling" — name the specific molecular change.
+MECHANISM: Use the PPI partners listed above — name at least 2 by their exact symbol.
+Describe the precise molecular event: the phosphorylation site, complex assembled or
+dissociated, E3 ligase substrate, transcriptional target de-repressed, etc.
+Never write "activates downstream signaling" — name the molecular change.
 
-DRUG LANDSCAPE: If the agent network found no drugs, frame it as competitive white space
-and recommend what class of molecule could be developed.
-Never write "Database query returned no results."
+DRUG LANDSCAPE: Use the ChEMBL and clinical trial data above. If no drugs exist, frame
+it as competitive white space and recommend a specific molecule class (e.g. PROTAC,
+covalent inhibitor, BiTE). Never write "Database query returned no results."
 
 Output ONLY valid JSON:
 {{
   "gene": "{gene}",
   "hypothesis": "<2-4 sentences: biological argument for why {gene} matters in {disease}. No statistics.>",
-  "mechanism": "<Concrete molecular mechanism naming >=2 proteins and a specific molecular event.>",
+  "mechanism": "<Concrete molecular mechanism naming >=2 PPI partners by symbol and a specific molecular event.>",
   "novelty_score": {novelty_score},
   "pub_count": {pub_count},
-  "supporting_evidence": ["<3-5 evidence points including: DGE stats (log2FC={lfc}, padj={padj}), DepMap/OT scores if retrieved, literature hits, drug landscape>"],
+  "supporting_evidence": ["<5-7 points: DGE stats, DepMap chronos/dependency, OT scores, clinical trial status, TCGA survival, AlphaFold structural notes, key literature titles+PMIDs, drug landscape>"],
   "key_pmids": {json.dumps(key_pmids)}
 }}
 """
@@ -1536,21 +1698,24 @@ def _parse_hypothesis(content: str, gene: str, novelty_score: float, pub_count: 
 
 
 def node_synthesize_hypotheses(state: AgentState) -> dict:
-    """
-    LLM hypothesis synthesis driven entirely by the supervisor investigation log.
-
-    Generates one hypothesis per gene that survived supervisor pruning — no
-    hardcoded count. The supervisor_context already contains rich natural-language
-    summaries of PPI, DepMap, OpenTargets, literature, and drug findings from
-    every iteration, so we use that as the primary evidence rather than re-injecting
-    raw data structures.
-    """
-    llm         = _llm()
+    """Synthesize one hypothesis per top gene using all collected structured evidence."""
+    llm          = _llm()
     disease_term = state.get("disease_term", "")
-    top_genes   = state.get("top_genes", [])
-    sup_context = _format_supervisor_context(state)
-    dge_map     = {r["gene"]: r for r in state.get("dge_results", [])}
-    lit_map     = {r["gene"]: r for r in state.get("literature_results", []) if r}
+    top_genes    = state.get("top_genes", [])
+    sup_context  = _format_supervisor_context(state)
+    dge_map      = {r["gene"]: r for r in state.get("dge_results", [])}
+    lit_map      = {r["gene"]: r for r in state.get("literature_results", []) if r}
+
+    ppi_results        = state.get("ppi_results", []) or []
+    depmap_results     = state.get("depmap_results", []) or []
+    ot_results         = state.get("opentargets_results", []) or []
+    drug_interactions  = state.get("drug_interactions", []) or []
+    lit_results        = state.get("literature_results", []) or []
+    pathway_results    = state.get("pathway_results", []) or []
+    ct_results         = state.get("clinical_trials_results", []) or []
+    tcga_results       = state.get("tcga_survival_results", []) or []
+    af_results         = state.get("alphafold_complex_results", []) or []
+    crosstalk_results  = state.get("pathway_crosstalk_results", []) or []
 
     hypotheses: list[dict] = []
 
@@ -1575,6 +1740,16 @@ def node_synthesize_hypotheses(state: AgentState) -> dict:
                 novelty_score,
                 pub_count,
                 key_pmids,
+                ppi_results=ppi_results,
+                depmap_results=depmap_results,
+                ot_results=ot_results,
+                drug_interactions=drug_interactions,
+                lit_results=lit_results,
+                pathway_results=pathway_results,
+                ct_results=ct_results,
+                tcga_results=tcga_results,
+                af_results=af_results,
+                crosstalk_results=crosstalk_results,
             )
             response = llm.invoke([
                 SystemMessage(content=_SYSTEM_PROMPT),
