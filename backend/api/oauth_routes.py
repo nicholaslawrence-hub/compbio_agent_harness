@@ -55,7 +55,7 @@ def _get_or_create_oauth_user(db: Session, provider: str, oauth_id: str, email: 
 
 
 def _error_redirect(msg: str = "oauth_failed"):
-    return RedirectResponse(f"{FRONTEND_URL}/login?error={msg}")
+    return RedirectResponse(f"{FRONTEND_URL}/oauth/callback?error={msg}")
 
 
 def _success_redirect(user: User) -> RedirectResponse:
