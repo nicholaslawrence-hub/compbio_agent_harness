@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
-import { ChevronLeft, Download, RefreshCw } from 'lucide-react'
+import { ChevronLeft, RefreshCw } from 'lucide-react'
 import { getJobStatus, getNetworkState, resolveApproval, streamJobProgress } from '../utils/api.js'
 import HypothesisCard from '../components/HypothesisCard.jsx'
 import DGETable from '../components/DGETable.jsx'
@@ -14,69 +14,14 @@ const PIPELINE_SPINE = ['run_dge', 'dge_retry', 'pathway_enrichment']
 const SUPERVISOR_CHILDREN = [
   'enrich_ppi', 'literature_rag', 'drug_annotation',
   'depmap_query', 'opentargets_query', 'clinical_trials',
-  'pathway_crosstalk', 'tcga_survival', 'crispr_designer',
+  'pathway_crosstalk', 'tcga_survival', 'alphafold_complex',
+  'crispr_designer', 'viper_protein_activity', 'mageck_crispr',
 ]
 const PIPELINE_TAIL = ['synthesize_hypotheses', 'generate_report']
 
 const NODE_LABEL_OVERRIDES = { supervisor: 'SUPERVISOR' }
 const nodeLabel = id => NODE_LABEL_OVERRIDES[id] ?? id
 
-const STEP_LOGS = {
-  queued:              [['INFO',    'job queued — worker pool available'],
-                        ['DEBUG',   'validating count_matrix_path and sample_conditions map']],
-  running:             [['INFO',    'tools/dge.py: parse_count_matrix_from_upload()'],
-                        ['DEBUG',   'PyDESeq2: median-of-ratios size factor estimation'],
-                        ['DEBUG',   'fitting negative binomial GLM per gene, all samples'],
-                        ['DEBUG',   'BH FDR correction across full detected-gene universe'],
-                        ['INFO',    'filtering: padj < 0.05, |log2FC| > 1.0, case/control']],
-  dge_complete:        [['INFO',    'tools/pathway.py: building detected-gene background for ORA'],
-                        ['DEBUG',   'Fisher exact on KEGG + GO-BP + Reactome (GSEApy)'],
-                        ['DEBUG',   'Jaccard deduplication of redundant GO terms (thresh=0.5)'],
-                        ['INFO',    'selected top 5 non-redundant pathways by adj. p-value']],
-  pathway_complete:    [['INFO',    'tools/ppi.py: STRING DB REST query (combined_score >= 700)'],
-                        ['DEBUG',   'collecting up to 15 high-confidence partners per gene'],
-                        ['DEBUG',   'cross-referencing KNOWN_ONCOGENES — tagging partners'],
-                        ['INFO',    'db/mygene.py: batch GO-MF + Reactome via MyGene.info']],
-  depmap_complete:     [['INFO',    'db/depmap.py: GET /api/gene/summary_stats (Chronos_Combined)'],
-                        ['DEBUG',   'parsing mean_chronos and percent_dependent per gene'],
-                        ['DEBUG',   'classifying: chronos < -0.5 → dependency, pct > 90 → essential'],
-                        ['INFO',    'flagging strongly_selective: cancer-type-specific lethality']],
-  ot_complete:         [['INFO',    'db/opentargets.py: POST /api/v4/graphql'],
-                        ['DEBUG',   'resolving HUGO symbols → Ensembl IDs via search()'],
-                        ['DEBUG',   'associatedDiseases(enableIndirect=true, size=200)'],
-                        ['INFO',    'decomposing: genetic_assoc, somatic_mut, known_drug, rna_expr']],
-  ppi_complete:        [['INFO',    'db/pinecone_rag.py: PubMed Entrez + Semantic Scholar'],
-                        ['DEBUG',   'generating text-embedding-3-small vectors per abstract'],
-                        ['DEBUG',   'upserting → Pinecone: rnagent-literature namespace'],
-                        ['INFO',    'semantic top-k per gene, is_dark scored by hit count']],
-  rag_complete:        [['INFO',    'db/uniprot.py: reviewed SwissProt entry per gene'],
-                        ['DEBUG',   'db/chembl.py: target_synonym__icontains lookup'],
-                        ['DEBUG',   'resolving pref_name + max_phase via batch molecule query'],
-                        ['INFO',    'sorted: (-max_phase, -pchembl_value)']],
-  annotation_complete: [['INFO',    'agents/nodes.py: node_synthesize_hypotheses()'],
-                        ['DEBUG',   'PubMed hit count: "{gene}[Title/Abstract] AND cancer"'],
-                        ['DEBUG',   'novelty = 1.0 - log10(pub_count) / 4.0, clamped [0,1]'],
-                        ['INFO',    'GPT chain-of-thought per gene via ThreadPoolExecutor']],
-  supervisor_routing:  [['ROUTING', 'node_supervisor() — parsing investigation history'],
-                        ['DEBUG',   '_format_supervisor_context(): accumulating context entries'],
-                        ['ROUTING', 'LLM selecting: enrich_ppi | literature_rag | drug_annotation | depmap_query | opentargets_query'],
-                        ['DEBUG',   'JSON parse: next_step, subquery, reasoning, prune_genes']],
-  supervisor_finalizing:[['ROUTING','supervisor: evidence coverage threshold met across priority genes'],
-                        ['DEBUG',   'releasing iteration guard (max_iterations=8)'],
-                        ['ROUTING', 'routing → node_synthesize_hypotheses()']],
-  synthesis_complete:  [['INFO',    'agents/nodes.py: node_generate_report()'],
-                        ['DEBUG',   'aggregating hypotheses + pathway_hits + pruned_genes log'],
-                        ['INFO',    'GPT: publication-style markdown with ranked targets'],
-                        ['INFO',    'AgentState.final_report written — status = complete']],
-}
-
-const SEVERITY_COLOR = {
-  INFO:    '#c8d3df',
-  DEBUG:   '#e2e8f0',
-  ROUTING: '#fbbf24',
-  ERROR:   '#f87171',
-  WARN:    '#facc15',
-}
 
 const STEP_META = {
   supervisor:        { color: '#f59e0b', label: 'SUPERVISOR' },
@@ -87,8 +32,12 @@ const STEP_META = {
   opentargets_query: { color: '#a78bfa', label: 'opentargets_query' },
   clinical_trials:   { color: '#60a5fa', label: 'clinical_trials' },
   pathway_crosstalk: { color: '#f97316', label: 'pathway_crosstalk' },
-  tcga_survival:     { color: '#e879f9', label: 'tcga_survival' },
-  run_dge:           { color: '#94a3b8', label: 'run_dge' },
+  tcga_survival:          { color: '#e879f9', label: 'tcga_survival' },
+  alphafold_complex:      { color: '#38bdf8', label: 'alphafold_complex' },
+  crispr_designer:        { color: '#4ade80', label: 'crispr_designer' },
+  viper_protein_activity: { color: '#c084fc', label: 'viper_protein_activity' },
+  mageck_crispr:          { color: '#f472b6', label: 'mageck_crispr' },
+  run_dge:                { color: '#94a3b8', label: 'run_dge' },
   pathway_enrichment:{ color: '#94a3b8', label: 'pathway_enrichment' },
 }
 
@@ -107,67 +56,87 @@ function nodeStatus(nodeId, executionEvents) {
   return 'pending'
 }
 
-function NodeDot({ status }) {
-  const colors = {
-    complete: '#22c55e',
-    active:   '#f59e0b',
-    failed:   '#ef4444',
-    pending:  '#64748b',
-  }
+const STATUS_GLYPH = {
+  complete: { text: 'ok',  color: '#22c55e' },
+  active:   { text: '>>', color: '#f59e0b' },
+  failed:   { text: '!!',  color: '#ef4444' },
+  pending:  { text: '--',  color: '#334155' },
+}
+
+function StatusTag({ status }) {
+  const { text, color } = STATUS_GLYPH[status] || STATUS_GLYPH.pending
   return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 6,
-        height: 6,
-        background: colors[status] || colors.pending,
-        border: status === 'pending' ? '1px solid #334155' : 'none',
-        flexShrink: 0,
-        animation: status === 'active' ? 'pulse 1.5s ease-in-out infinite' : 'none',
-      }}
-    />
+    <span style={{ color, flexShrink: 0, minWidth: '2ch', letterSpacing: '0.05em' }}>{text}</span>
   )
 }
 
-function DAGView({ executionEvents, currentStatus }) {
-  const isSupervisorActive = currentStatus?.startsWith('supervisor')
+function flattenTopologyNodes(topology) {
+  return (topology?.nodes ?? [])
+    .filter(n => n.type !== 'supervisorGroup')
+    .map(n => ({
+      id:    n.id,
+      type:  n.data?.type  || n.type  || n.id,
+      label: n.data?.label || n.label || n.id,
+    }))
+}
 
-  const nodeColor = (s, accentColor) => {
+function DAGView({ executionEvents, networkTopology }) {
+  const nameColor = (s, accentColor) => {
     if (s === 'complete') return '#e2e8f0'
-    if (s === 'active') return accentColor || '#fbbf24'
+    if (s === 'active')   return accentColor || '#e2e8f0'
     return '#94a3b8'
   }
 
+  const BASE = { fontFamily: 'JetBrains Mono, monospace', fontSize: 17, lineHeight: '2.0', color: '#ffffff' }
+  const ROW  = { display: 'flex', alignItems: 'center', gap: 8 }
+
+  // Sandbox run: derive nodes from the saved topology
+  if (networkTopology?.nodes?.length) {
+    return (
+      <div style={BASE}>
+        {flattenTopologyNodes(networkTopology).map(node => {
+          const s    = nodeStatus(node.type, executionEvents)
+          const meta = STEP_META[node.type] || {}
+          return (
+            <div key={node.id} style={ROW}>
+              <StatusTag status={s} />
+              <span style={{ color: nameColor(s, meta.color) }}>{node.label}</span>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Standard run: hardcoded pipeline shape
+  const supStatus = nodeStatus('supervisor', executionEvents)
   return (
-    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 14, lineHeight: '1.9', color: '#ffffff' }}>
+    <div style={BASE}>
       {PIPELINE_SPINE.map(id => {
         const s = nodeStatus(id, executionEvents)
         if (s === 'pending' && id === 'dge_retry') return null
         return (
-          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <NodeDot status={s} />
-            <span style={{ color: nodeColor(s) }}>{nodeLabel(id)}</span>
+          <div key={id} style={ROW}>
+            <StatusTag status={s} />
+            <span style={{ color: nameColor(s) }}>{nodeLabel(id)}</span>
           </div>
         )
       })}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-        <NodeDot status={isSupervisorActive ? 'active' : nodeStatus('supervisor', executionEvents)} />
-        <span style={{ color: isSupervisorActive ? '#fbbf24' : nodeColor(nodeStatus('supervisor', executionEvents)), fontWeight: 'bold' }}>
-          SUPERVISOR
-        </span>
-        {isSupervisorActive && <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>routing…</span>}
+      <div style={ROW}>
+        <StatusTag status={supStatus} />
+        <span style={{ color: nameColor(supStatus, '#f59e0b'), fontWeight: 'bold' }}>SUPERVISOR</span>
       </div>
 
       {SUPERVISOR_CHILDREN.map((id, i) => {
-        const s = nodeStatus(id, executionEvents)
+        const s      = nodeStatus(id, executionEvents)
         const isLast = i === SUPERVISOR_CHILDREN.length - 1
-        const meta = STEP_META[id] || {}
+        const meta   = STEP_META[id] || {}
         return (
-          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 12, whiteSpace: 'nowrap' }}>
-            <span style={{ color: '#64748b', flexShrink: 0 }}>{isLast ? '└─' : '├─'}</span>
-            <NodeDot status={s} />
-            <span style={{ color: nodeColor(s, meta.color) }}>{nodeLabel(id)}</span>
+          <div key={id} style={{ ...ROW, paddingLeft: 14, whiteSpace: 'nowrap' }}>
+            <span style={{ color: '#334155', flexShrink: 0 }}>{isLast ? '└' : '├'}</span>
+            <StatusTag status={s} />
+            <span style={{ color: nameColor(s, meta.color) }}>{nodeLabel(id)}</span>
           </div>
         )
       })}
@@ -175,9 +144,9 @@ function DAGView({ executionEvents, currentStatus }) {
       {PIPELINE_TAIL.map(id => {
         const s = nodeStatus(id, executionEvents)
         return (
-          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: id === PIPELINE_TAIL[0] ? 2 : 0 }}>
-            <NodeDot status={s} />
-            <span style={{ color: nodeColor(s) }}>{nodeLabel(id)}</span>
+          <div key={id} style={ROW}>
+            <StatusTag status={s} />
+            <span style={{ color: nameColor(s) }}>{nodeLabel(id)}</span>
           </div>
         )
       })}
@@ -185,66 +154,67 @@ function DAGView({ executionEvents, currentStatus }) {
   )
 }
 
-function TelemetryBlock({ entry, index, isNewest, startEpoch }) {
-  const meta = STEP_META[entry.step] || STEP_META.supervisor
-  const isRouter = entry.step === 'supervisor'
-  const tsOffset = index * 3200
-  const ts = new Date(startEpoch + tsOffset)
-  const tsStr = ts.toTimeString().slice(0, 8) + '.' + String(ts.getMilliseconds()).padStart(3, '0')
+function TerminalLine({ entry, isNewest, isActive }) {
+  const meta      = STEP_META[entry.step] || {}
+  const isRouter  = entry.step === 'supervisor'
+  const nodeColor = meta.color || '#94a3b8'
 
-  let routedTo = null
-  let reasoning = entry.summary || ''
+  let callTarget = null
+  let reasoning  = ''
   if (isRouter && entry.summary) {
     const m = entry.summary.match(/^Decision:\s*(\w+)\.\s*(.*)/)
-    if (m) { routedTo = m[1]; reasoning = m[2] }
+    if (m) { callTarget = m[1]; reasoning = m[2] }
   }
+
+  const hasQuery = entry.subquery && entry.subquery !== 'all top genes'
 
   return (
     <div style={{
-      borderBottom: '1px solid #0a0f1a',
-      padding: '6px 14px',
-      opacity: isNewest ? 1 : 0.45,
+      padding: '4px 14px',
+      opacity: isNewest ? 1 : 0.4,
       fontFamily: 'JetBrains Mono, monospace',
-      fontSize: 13,
-      lineHeight: 1.4,
+      fontSize: 14,
+      lineHeight: 1.7,
+      borderBottom: '1px solid #060a10',
     }}>
-      {/* Header line */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
-        <span style={{ color: meta.color || '#94a3b8', fontWeight: 700, flexShrink: 0 }}>
-          {meta.label || entry.step}
-        </span>
-        {routedTo && (
-          <span style={{ color: '#e2e8f0', flexShrink: 0 }}>→ <span style={{ color: (STEP_META[routedTo] || {}).color || '#e2e8f0' }}>{routedTo}</span></span>
-        )}
-        {entry.subquery && entry.subquery !== 'all top genes' && !routedTo && (
-          <span style={{ color: '#e2e8f0', flexShrink: 0 }}>:<span style={{ color: '#ffffff' }}>{entry.subquery}</span></span>
-        )}
-      </div>
-
-      {/* Scratchpad */}
-      {reasoning && (
-        <div style={{ marginLeft: '2ch', borderLeft: '1px solid #1e293b', paddingLeft: 6, marginTop: 2, marginBottom: 2 }}>
-          <span style={{ color: '#64748b' }}>&lt;scratchpad&gt;</span>
-          <span style={{ color: '#e2e8f0', marginLeft: 4 }}>{reasoning}</span>
-          <span style={{ color: '#64748b' }}>&lt;/scratchpad&gt;</span>
-        </div>
-      )}
-
-      {/* call_tool */}
-      {isRouter && routedTo && (
-        <div style={{ marginLeft: '2ch', borderLeft: '1px solid #1e293b', paddingLeft: 6, color: '#22d3ee', whiteSpace: 'pre', marginBottom: 1 }}>
-          {'call_tool: { "name": "' + routedTo + '"' + (entry.subquery && entry.subquery !== 'all top genes' ? ', "args": { "target": "' + entry.subquery + '" }' : '') + ' }'}
+      {isRouter && callTarget ? (
+        <>
+          <div>
+            <span style={{ color: '#334155' }}>[</span>
+            <span style={{ color: '#f59e0b' }}>supervisor</span>
+            <span style={{ color: '#334155' }}>]</span>
+            {'  '}
+            <span style={{ color: '#f59e0b' }}>call_tool</span>
+            <span style={{ color: '#64748b' }}>(</span>
+            <span style={{ color: (STEP_META[callTarget] || {}).color || '#22d3ee' }}>"{callTarget}"</span>
+            {hasQuery && (
+              <><span style={{ color: '#64748b' }}>, </span>
+              <span style={{ color: '#475569' }}>{`{"query":"${entry.subquery}"}`}</span></>
+            )}
+            <span style={{ color: '#64748b' }}>)</span>
+          </div>
+          {reasoning && (
+            <div style={{ paddingLeft: '2ch', color: '#334155', fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {reasoning.length > 140 ? reasoning.slice(0, 140) + '…' : reasoning}
+            </div>
+          )}
+        </>
+      ) : (
+        <div>
+          <span style={{ color: '#334155' }}>[</span>
+          <span style={{ color: nodeColor }}>{entry.step}</span>
+          <span style={{ color: '#334155' }}>]</span>
+          {'  '}
+          <span style={{ color: '#22c55e' }}>ok</span>
+          {'  '}
+          <span style={{ color: '#94a3b8' }}>{entry.summary || entry.subquery || entry.status || ''}</span>
+          {isActive && <span style={{ color: '#f59e0b', animation: 'blink 1s step-end infinite' }}> ▌</span>}
         </div>
       )}
     </div>
   )
 }
 
-function formatElapsed(s) {
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return m > 0 ? `${m}m ${sec.toString().padStart(2, '0')}s` : `${s}s`
-}
 
 export default function ResultsPage() {
   const { jobId } = useParams()
@@ -253,13 +223,10 @@ export default function ResultsPage() {
   const [error, setError] = useState('')
   const [supervisorLog, setSupervisorLog] = useState([])
   const [executionEvents, setExecutionEvents] = useState([])
-  const [promptPayloads, setPromptPayloads] = useState([])
   const [networkTopology, setNetworkTopology] = useState(null)
   const [checkpoint, setCheckpoint] = useState(null)
   const [approvalBusy, setApprovalBusy] = useState('')
   const telemetryRef = useRef(null)
-  const terminalRef = useRef(null)
-  const startEpochRef = useRef(Date.now())
 
   useEffect(() => {
     getNetworkState(jobId)
@@ -267,7 +234,6 @@ export default function ResultsPage() {
         setCheckpoint(data.checkpoint)
         if (data.checkpoint?.network_topology) setNetworkTopology(data.checkpoint.network_topology)
         if (data.checkpoint?.execution_events?.length) setExecutionEvents(data.checkpoint.execution_events)
-        if (data.checkpoint?.prompt_payloads?.length) setPromptPayloads(data.checkpoint.prompt_payloads)
       })
       .catch(() => {})
     getJobStatus(jobId)
@@ -275,7 +241,6 @@ export default function ResultsPage() {
         setJob(data)
         if (data.network_topology) setNetworkTopology(data.network_topology)
         if (data.execution_events?.length) setExecutionEvents(data.execution_events)
-        if (data.prompt_payloads?.length) setPromptPayloads(data.prompt_payloads)
       })
       .catch(e => setError(e.message))
     const stop = streamJobProgress(
@@ -286,15 +251,13 @@ export default function ResultsPage() {
           setSupervisorLog(data.supervisor_context)
         }
         if (data.execution_events?.length) setExecutionEvents(data.execution_events)
-        if (data.prompt_payloads?.length) setPromptPayloads(data.prompt_payloads)
         if (data.network_topology) setNetworkTopology(data.network_topology)
         setCheckpoint(prev => ({
           ...(prev || {}),
-          node_outputs:     data.node_outputs      || prev?.node_outputs      || {},
+          node_outputs:      data.node_outputs      || prev?.node_outputs      || {},
+          node_status:       data.node_status       || prev?.node_status       || {},
           artifact_registry: data.artifact_registry || prev?.artifact_registry || {},
-          pending_tasks:    data.pending_tasks      || prev?.pending_tasks      || {},
           approval_requests: data.approval_requests || prev?.approval_requests || {},
-          provenance_ledger: data.provenance_ledger || prev?.provenance_ledger  || [],
         }))
       },
       (data) => {
@@ -315,34 +278,15 @@ export default function ResultsPage() {
   const dgeResults = result.dge_results ?? []
   const report = result.final_report ?? ''
 
-  const startTimeRef = useRef(null)
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    if (!isRunning) { startTimeRef.current = null; setElapsed(0); return }
-    if (!startTimeRef.current) startTimeRef.current = Date.now()
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000)), 1000)
-    return () => clearInterval(id)
-  }, [isRunning])
-
-  const [logLineIdx, setLogLineIdx] = useState(0)
-  const prevStatusRef = useRef(null)
-  useEffect(() => {
-    if (job?.status !== prevStatusRef.current) { prevStatusRef.current = job?.status; setLogLineIdx(0) }
-  }, [job?.status])
-  useEffect(() => {
-    if (!isRunning) return
-    const logs = STEP_LOGS[job?.status] ?? []
-    if (logLineIdx >= logs.length - 1) return
-    const id = setTimeout(() => setLogLineIdx(i => i + 1), 1600)
-    return () => clearTimeout(id)
-  }, [isRunning, job?.status, logLineIdx])
-
-  useEffect(() => {
-    if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight
-  }, [logLineIdx])
-
-  const currentLogs = STEP_LOGS[job?.status] ?? []
-  const allTerminalLines = currentLogs.slice(0, logLineIdx + 1)
+  // Merge spine execution events + supervisor context into one chronological stream.
+  // executionEvents covers run_dge / pathway_enrichment; supervisorLog covers the rest.
+  const terminalEntries = (() => {
+    const spineIds = new Set([...PIPELINE_SPINE, ...PIPELINE_TAIL])
+    const spineEvents = executionEvents
+      .filter(e => spineIds.has(e.node_id || e.step))
+      .map(e => ({ step: e.node_id || e.step, subquery: '', summary: e.status || '', _isSpine: true }))
+    return [...spineEvents, ...supervisorLog]
+  })()
 
   const approvalRequests = Object.entries(checkpoint?.approval_requests || {})
     .filter(([, req]) => req?.status === 'awaiting_user_approval' || req?.decision)
@@ -393,110 +337,40 @@ export default function ResultsPage() {
       {isRunning && (
         <div style={{ background: '#080c12', border: '1px solid #0f172a', marginBottom: 8 }}>
 
-          {/* Main two-column layout */}
-          <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: '1px solid #0f172a' }}>
+          {/* Two-column: DAG | Telemetry */}
+          <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr' }}>
 
             {/* LEFT: DAG view */}
-            <div style={{
-              borderRight: '1px solid #0f172a',
-              padding: '12px 16px',
-              background: '#060a10',
-            }}>
-              <div style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: 11,
-                color: '#64748b',
-                letterSpacing: '0.08em',
-                marginBottom: 10,
-                textTransform: 'uppercase',
-              }}>
+            <div style={{ borderRight: '1px solid #0f172a', padding: '14px 18px', background: '#060a10' }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#64748b', letterSpacing: '0.08em', marginBottom: 12, textTransform: 'uppercase' }}>
                 NODE GRAPH
               </div>
-              <DAGView executionEvents={executionEvents} currentStatus={job?.status} />
+              <DAGView executionEvents={executionEvents} networkTopology={networkTopology} />
             </div>
 
-            {/* RIGHT: Terminal + Telemetry stacked */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-
-              {/* Telemetry feed */}
-              <div
-                ref={telemetryRef}
-                style={{
-                  height: 320,
-                  overflowY: 'auto',
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: '#1e293b transparent',
-                }}
-              >
-                <div style={{
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: 11,
-                  color: '#64748b',
-                  letterSpacing: '0.08em',
-                  padding: '8px 14px 5px',
-                  textTransform: 'uppercase',
-                  borderBottom: '1px solid #0a0f1a',
-                }}>
-                  AGENT TELEMETRY — supervisor_context[{supervisorLog.length}]
-                </div>
-                {supervisorLog.length === 0 && (
-                  <div style={{ padding: '12px 14px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#64748b' }}>
-                    awaiting first supervisor tick…
-                  </div>
-                )}
-                {supervisorLog.map((entry, i) => (
-                  <TelemetryBlock
-                    key={i}
-                    entry={entry}
-                    index={i}
-                    isNewest={i === supervisorLog.length - 1}
-                    startEpoch={startEpochRef.current}
-                  />
-                ))}
+            {/* RIGHT: Terminal event stream */}
+            <div
+              ref={telemetryRef}
+              style={{ height: 520, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#1e293b transparent' }}
+            >
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#64748b', letterSpacing: '0.08em', padding: '8px 14px 5px', textTransform: 'uppercase', borderBottom: '1px solid #0a0f1a' }}>
+                EXECUTION LOG — {terminalEntries.length} events
               </div>
-            </div>
-          </div>
-
-          {/* Bottom grid: Artifacts | Pending | Provenance */}
-          {checkpoint && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
-              {[
-                { label: 'ARTIFACTS', data: checkpoint.artifact_registry || {} },
-                { label: 'PENDING_TASKS', data: checkpoint.pending_tasks || {} },
-                { label: 'PROVENANCE[-3:]', data: (checkpoint.provenance_ledger || []).slice(-3) },
-              ].map(({ label, data }, i) => (
-                <div key={label} style={{
-                  borderRight: i < 2 ? '1px solid #0f172a' : 'none',
-                  padding: '8px 14px',
-                  background: '#060a10',
-                }}>
-                  <div style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: 11,
-                    color: '#64748b',
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    marginBottom: 6,
-                  }}>
-                    {label}
-                  </div>
-                  <pre style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: 12,
-                    color: '#94a3b8',
-                    maxHeight: 110,
-                    overflow: 'auto',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                    margin: 0,
-                    scrollbarWidth: 'none',
-                  }}>
-                    {JSON.stringify(data, null, 2)}
-                  </pre>
+              {terminalEntries.length === 0 && (
+                <div style={{ padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: 14, color: '#334155' }}>
+                  {'>'} waiting for first node…<span style={{ animation: 'blink 1s step-end infinite' }}>▌</span>
                 </div>
+              )}
+              {terminalEntries.map((entry, i) => (
+                <TerminalLine
+                  key={i}
+                  entry={entry}
+                  isNewest={i === terminalEntries.length - 1}
+                  isActive={isRunning && i === terminalEntries.length - 1}
+                />
               ))}
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -560,7 +434,7 @@ export default function ResultsPage() {
             {TABS.map(t => (
               <button
                 key={t}
-                onClick={() => setTab(t)}
+                onClick={() => { setTab(t); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                   tab === t ? 'bg-slate-900 text-white border border-b-slate-900 border-slate-800' : 'text-white/40 hover:text-white/80'
                 }`}
