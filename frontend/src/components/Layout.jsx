@@ -63,24 +63,6 @@ export default function Layout() {
             </NavLink>
 
             <NavLink
-              to="/sandbox"
-              className={({ isActive }) =>
-                `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
-                  isActive ? 'text-white' : 'text-white hover:text-amber-400'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  Sandbox
-                  {isActive && (
-                    <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
-                  )}
-                </>
-              )}
-            </NavLink>
-
-            <NavLink
               to="/tools"
               className={({ isActive }) =>
                 `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
@@ -99,12 +81,30 @@ export default function Layout() {
             </NavLink>
 
             <NavLink
+              to="/sandbox"
+              className={({ isActive }) =>
+                `relative flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-150 ${
+                  isActive ? 'text-white' : 'text-white hover:text-amber-400'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  Sandbox
+                  {isActive && (
+                    <span className="absolute bottom-0 left-4 right-4 h-px bg-amber-400/70 rounded-full" />
+                  )}
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
               to="/run"
               className={({ isActive }) =>
                 `flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 ${
                   isActive
                     ? 'bg-amber-400 text-slate-900'
-                    : 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+                    : 'bg-amber-400 text-slate-900 hover:bg-amber-300'
                 }`
               }
             >
