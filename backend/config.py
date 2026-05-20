@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     processed_dir: Path = Path("/tmp/pharmagt/processed")
     results_dir: Path = Path("/tmp/pharmagt/results")
 
+    database_url: str = "postgresql://localhost/pharmagt"
+
     max_genes_for_rag: int = 10
     pubmed_max_results: int = 5
     llm_model: str = "gpt-5.4-mini"
