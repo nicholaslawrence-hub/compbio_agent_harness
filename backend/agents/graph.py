@@ -179,14 +179,6 @@ def _route_after_dge_retry(state: AgentState) -> str:
     return "pathway_enrichment"
 
 
-def _make_supervisor_router(valid_targets: set[str]) -> Callable[[AgentState], str]:
-    """Return a supervisor router scoped to the given set of valid edge targets."""
-    def _route(state: AgentState) -> str:
-        next_step = state.get("next_step", "finalize")
-        return next_step if next_step in valid_targets else "finalize"
-    return _route
-
-
 # ── Node wrapper ──────────────────────────────────────────────────────────────
 
 _COMPLETE_STATUSES: frozenset[str] = frozenset({
@@ -345,28 +337,20 @@ def _report_node(state: AgentState) -> dict:
 
 # ── Default pipeline ──────────────────────────────────────────────────────────
 
-# Specialists that loop back through supervisor; crispr_designer exits to synthesize directly
-_SPECIALISTS: tuple[str, ...] = (
-    "enrich_ppi", "literature_rag", "drug_annotation", "depmap_query",
-    "opentargets_query", "clinical_trials", "pathway_crosstalk", "tcga_survival",
-)
-_DEFAULT_SUPERVISOR_TARGETS: set[str] = {*_SPECIALISTS, "crispr_designer", "finalize"}
-
-_DEFAULT_GRAPH_NODES: list[tuple[str, Any]] = [
-    ("run_dge", node_run_dge),
-    ("dge_retry", node_dge_retry),
-    ("pathway_enrichment", node_pathway_enrichment),
-    ("supervisor", node_supervisor),
-    *((s, NODE_IMPLS[s]) for s in _SPECIALISTS),
-    ("crispr_designer", node_crispr_designer),
-    ("synthesize_hypotheses", node_synthesize_hypotheses),
-    ("generate_report", node_generate_report),
-]
-
-
 def build_default_graph():
+    """
+    Default pipeline. The supervisor is now a full tool-calling ReAct agent that runs
+    its entire investigation loop in a single node invocation — no specialist routing loop.
+    """
     g = StateGraph(AgentState)
-    for name, fn in _DEFAULT_GRAPH_NODES:
+    for name, fn in [
+        ("run_dge",              node_run_dge),
+        ("dge_retry",            node_dge_retry),
+        ("pathway_enrichment",   node_pathway_enrichment),
+        ("supervisor",           node_supervisor),
+        ("synthesize_hypotheses",node_synthesize_hypotheses),
+        ("generate_report",      node_generate_report),
+    ]:
         g.add_node(name, _wrap_node(name, name, fn))
 
     g.add_edge(START, "run_dge")
@@ -377,13 +361,7 @@ def build_default_graph():
         "pathway_enrichment": "pathway_enrichment", "end": END,
     })
     g.add_edge("pathway_enrichment", "supervisor")
-    for s in _SPECIALISTS:
-        g.add_edge(s, "supervisor")
-
-    supervisor_routing = {s: s for s in _SPECIALISTS}
-    supervisor_routing.update({"crispr_designer": "crispr_designer", "finalize": "synthesize_hypotheses"})
-    g.add_conditional_edges("supervisor", _make_supervisor_router(_DEFAULT_SUPERVISOR_TARGETS), supervisor_routing)
-    g.add_edge("crispr_designer", "synthesize_hypotheses")
+    g.add_edge("supervisor", "synthesize_hypotheses")
     g.add_edge("synthesize_hypotheses", "generate_report")
     g.add_edge("generate_report", END)
     return g.compile()

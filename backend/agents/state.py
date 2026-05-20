@@ -38,7 +38,6 @@ class DrugInteraction(TypedDict):
 
 class DepmapResult(TypedDict):
     gene: str
-    mean_chronos: Optional[float]
     percent_dependent: Optional[float]
     is_common_essential: bool
     is_strongly_selective: bool

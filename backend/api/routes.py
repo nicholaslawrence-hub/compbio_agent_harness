@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from config import settings
@@ -413,7 +413,7 @@ async def save_sandbox_design(design_id: str, payload: SandboxDesignPayload, req
     user_id = _require_user_id(request)
     safe_id = _safe_design_id(design_id)
     path = _sandbox_design_dir() / f"{_safe_design_id(str(user_id))}__{safe_id}.json"
-    data = payload.dict()
+    data = payload.model_dump()
     data.update({
         "id": safe_id,
         "version": 1,
@@ -458,9 +458,9 @@ async def start_sandbox_analysis(
         raise HTTPException(status_code=400, detail="Select at least one sandbox agent")
 
     try:
-        config["max_iterations"] = max(1, min(8, int(config.get("max_iterations", 4))))
+        config["max_iterations"] = max(1, min(12, int(config.get("max_iterations", 6))))
     except (TypeError, ValueError):
-        config["max_iterations"] = 4
+        config["max_iterations"] = 6
 
     save_path = settings.raw_dir / f"{job_id}_{Path(count_matrix.filename).name}"
     content = await count_matrix.read()
