@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from tools.utils import adapter_missing as _adapter_missing
+
 
 def _fetch_dorothea_regulons(genes: list[str], levels: str = "A,B,C") -> list[dict]:
     """Fetch TF→target edges from OmniPath DoRothEA for a list of target genes."""
@@ -106,5 +108,3 @@ def run_viper_protein_activity(genes: list[str], disease: str, regulon_source: s
     return rows
 
 
-def _adapter_missing(gene: str, node_type: str, message: str) -> dict[str, Any]:
-    return {"gene": gene, "node_type": node_type, "source": "adapter_not_configured", "status": "not_configured", "summary": message}

@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from tools.utils import adapter_missing as _adapter_missing
+
 
 # ── Guide design ─────────────────────────────────────────────────────────────
 
@@ -127,5 +129,3 @@ def run_mageck_crispr(genes: list[str], design: str = "treatment_vs_control") ->
     return rows
 
 
-def _adapter_missing(gene: str, node_type: str, message: str) -> dict[str, Any]:
-    return {"gene": gene, "node_type": node_type, "source": "adapter_not_configured", "status": "not_configured", "summary": message}

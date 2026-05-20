@@ -1,7 +1,6 @@
 """Wrappers for Kallisto/Salmon transcript quantification via subprocess."""
 import subprocess
 import shutil
-import json
 from pathlib import Path
 
 

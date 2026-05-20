@@ -8,6 +8,8 @@ from rdkit import Chem
 from rdkit.Chem import Crippen, Descriptors, Lipinski, QED, rdFingerprintGenerator
 import requests
 
+from tools.utils import adapter_missing as _adapter_missing
+
 
 def run_reinvent_generation(target: str, pocket: str = "auto", n: int = 8) -> list[dict[str, Any]]:
     """REINVENT4 adapter for de novo SMILES generation. Requires REINVENT_API_URL."""
@@ -79,5 +81,3 @@ def calculate_rdkit_features(ligands: list[dict[str, Any]]) -> list[dict[str, An
     return rows
 
 
-def _adapter_missing(gene: str, node_type: str, message: str) -> dict[str, Any]:
-    return {"gene": gene, "node_type": node_type, "source": "adapter_not_configured", "status": "not_configured", "summary": message}
