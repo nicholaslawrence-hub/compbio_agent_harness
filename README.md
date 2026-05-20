@@ -106,55 +106,79 @@ S1:disease,S2:disease,S3:disease,S4:control,S5:control,S6:control
 compbio_agent_harness/
 ├── backend/
 │   ├── agents/
-│   │   ├── graph.py              # LangGraph supervisor loop + tool registration
-│   │   ├── nodes.py              # Seven agent node functions (DGE -> Report)
-│   │   └── state.py              # AgentState TypedDict schema
+│   │   ├── graph.py              # builds the LangGraph, registers tools
+│   │   ├── nodes.py              # every node function lives here
+│   │   ├── runtime.py            # runs jobs, streams SSE events
+│   │   └── state.py              # AgentState schema
 │   ├── api/
-│   │   ├── routes.py             # Analysis + gene lookup endpoints
-│   │   └── auth_routes.py        # Register, login, /me, job history
+│   │   ├── routes.py             # main endpoints (analysis, sandbox, gene lookup)
+│   │   ├── auth_routes.py        # register, login, /me, history
+│   │   └── oauth_routes.py       # OAuth callback
 │   ├── db/
-│   │   ├── database.py           # SQLAlchemy engine + session factory
-│   │   ├── user_models.py        # User + JobRecord ORM models
-│   │   ├── ncbi.py               # NCBI Entrez (SRA search + PubMed abstracts)
-│   │   ├── uniprot.py            # UniProt REST client (function, GO, PDB IDs)
-│   │   ├── chembl.py             # ChEMBL drug interactions (official webresource client)
-│   │   ├── mygene.py             # MyGene.info batch GO + Reactome annotation
-│   │   ├── literature_fetch.py   # Semantic Scholar fetch with 429 backoff
-│   │   └── pinecone_rag.py       # Pinecone vector search + dark-gene scoring
+│   │   ├── database.py           # SQLAlchemy + PostgreSQL setup
+│   │   ├── user_models.py        # User and JobRecord models
+│   │   ├── ncbi.py               # PubMed abstracts via Entrez
+│   │   ├── uniprot.py            # protein function, GO terms, PDB IDs
+│   │   ├── chembl.py             # drug binding data
+│   │   ├── mygene.py             # GO + Reactome annotation per gene
+│   │   ├── depmap.py             # CRISPR essentiality from DepMap 26Q1
+│   │   ├── opentargets.py        # disease association scores
+│   │   ├── literature_fetch.py   # pulls abstracts, handles rate limits
+│   │   └── pinecone_rag.py       # vector search, dark gene scoring
 │   ├── tools/
-│   │   ├── dge.py                # PyDESeq2 + t-test fallback, count matrix parsing
-│   │   ├── pathway.py            # ORA / GSEA-prerank + Jaccard deduplication
-│   │   ├── ppi.py                # STRING DB PPI queries + oncogene tagging
-│   │   └── quantification.py     # Read quantification utilities
-│   ├── auth.py                   # JWT creation/verification, bcrypt hashing
-│   ├── main.py                   # FastAPI app entry point
-│   └── config.py                 # Pydantic settings (env-driven)
+│   │   ├── dge.py                # PyDESeq2, falls back to t-test
+│   │   ├── pathway.py            # ORA / GSEA, deduplicates GO terms
+│   │   ├── ppi.py                # STRING queries, oncogene tagging
+│   │   ├── quantification.py     # count matrix parsing
+│   │   ├── chemistry.py          # RDKit, GNINA docking, REINVENT (stubs)
+│   │   ├── crispr.py             # gRNA design, MAGeCK (stubs)
+│   │   ├── structure.py          # AlphaFold fetch
+│   │   ├── viper.py              # protein activity via DoRothEA regulons
+│   │   └── utils.py              # shared helpers
+│   ├── tests/
+│   │   └── test_agentic_architecture.py
+│   ├── auth.py                   # JWT + bcrypt
+│   ├── main.py                   # FastAPI entry point
+│   ├── config.py                 # env-driven settings
+│   └── sanity_test.py            # end-to-end pipeline test
 ├── frontend/
 │   └── src/
 │       ├── contexts/
-│       │   └── AuthContext.jsx   # Auth state, login/register/logout
+│       │   └── AuthContext.jsx   # auth state
+│       ├── data/
+│       │   └── agentCatalog.js   # node registry used by sandbox and tool docs
 │       ├── pages/
-│       │   ├── AnalyzePage.jsx   # Landing page + interactive agent network explainer
-│       │   ├── RunPage.jsx       # Upload form + sample condition annotator
-│       │   ├── ResultsPage.jsx   # Live SSE progress + tabbed results
-│       │   ├── GeneLookupPage.jsx# Single-gene deep-dive (PPI, drugs, literature)
-│       │   ├── LoginPage.jsx     # Sign in / create account
-│       │   └── AccountPage.jsx   # Profile + analysis history
+│       │   ├── AnalyzePage.jsx   # landing page
+│       │   ├── RunPage.jsx       # upload + condition setup
+│       │   ├── ResultsPage.jsx   # live progress, DAG view, results tabs
+│       │   ├── SandboxPage.jsx   # drag-and-drop DAG builder
+│       │   ├── ToolsPage.jsx     # tool reference
+│       │   ├── GeneLookupPage.jsx# per-gene deep dive
+│       │   ├── LoginPage.jsx     # login / signup
+│       │   ├── AccountPage.jsx   # profile + history
+│       │   ├── OAuthCallbackPage.jsx
+│       │   └── PrivacyPolicyPage.jsx
 │       ├── components/
-│       │   ├── Layout.jsx        # Navbar + footer
-│       │   ├── AgentWeb.jsx      # Force-directed agent network visualisation
-│       │   ├── HypothesisCard.jsx# Ranked therapeutic hypothesis display
-│       │   ├── ProgressBar.jsx   # SSE-driven progress indicator
-│       │   ├── DGETable.jsx      # Sortable differential expression table
-│       │   ├── UploadForm.jsx    # Drag-and-drop matrix upload
-│       │   └── VolcanoPlot.jsx   # Interactive volcano plot (D3)
+│       │   ├── Layout.jsx        # navbar + footer
+│       │   ├── AgentWeb.jsx      # animated agent network on the landing page
+│       │   ├── HypothesisCard.jsx# displays a single hypothesis
+│       │   ├── ProgressBar.jsx   # progress indicator
+│       │   ├── DGETable.jsx      # sortable gene table
+│       │   ├── UploadForm.jsx    # file upload
+│       │   ├── VolcanoPlot.jsx   # volcano plot
+│       │   ├── NetworkExecutionVisualizer.jsx
+│       │   └── sandbox/
+│       │       ├── BioToolNode.jsx       # specialist node
+│       │       ├── SupervisorNode.jsx    # supervisor node
+│       │       ├── TranslatorNode.jsx    # LLM translation node between tools
+│       │       ├── NodeSocket.jsx        # custom handle
+│       │       ├── EdgeChatInspector.jsx # click an edge to inspect the translation
+│       │       └── OpticTetherEdge.jsx   # animated edge
 │       └── utils/
-│           └── api.js            # Fetch wrappers + Bearer auth header
+│           └── api.js            # fetch wrappers, auth headers
 ├── data/
-│   └── sample_counts.tsv         # Demo count matrix (dark + control genes)
-├── scripts/
-│   └── generate_demo_data.py     # Synthetic count matrix generator
-├── Dockerfile                    # Backend container (Railway)
+│   └── sample_counts.tsv         # demo matrix with dark genes + known controls
+├── Dockerfile                    # Railway backend
 ├── railway.toml
 └── vercel.json
 ```
