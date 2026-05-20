@@ -81,11 +81,10 @@ def _from_summary_row(symbol: str, row: pd.Series) -> dict:
     """Build a result dict from a gene_dep_summary row."""
     dep_lines  = _int_or_none(row.get("dependent_cell_lines"))
     total_lines = _int_or_none(row.get("cell_lines_with_data"))
-    pct = round(dep_lines / total_lines * 100, 1) if dep_lines and total_lines else None
+    pct = round(dep_lines / total_lines * 100, 1) if dep_lines is not None and total_lines else None
 
     return {
         "gene":                  symbol,
-        "mean_chronos":          None,           # not in summary CSV
         "percent_dependent":     pct,
         "dependent_cell_lines":  dep_lines,
         "total_cell_lines":      total_lines,
@@ -130,7 +129,6 @@ def _from_custom_download(symbol: str) -> dict | None:
 
 def _compute_from_scores(symbol: str, scores: list[float], df: pd.DataFrame) -> dict:
     """Derive summary statistics from a list of Chronos effect scores."""
-    mean_s = sum(scores) / len(scores)
     n_dep  = sum(1 for s in scores if s < -0.5)
     pct    = round(n_dep / len(scores) * 100, 1)
 
@@ -146,7 +144,6 @@ def _compute_from_scores(symbol: str, scores: list[float], df: pd.DataFrame) -> 
 
     return {
         "gene":                  symbol,
-        "mean_chronos":          round(mean_s, 3),
         "percent_dependent":     pct,
         "dependent_cell_lines":  n_dep,
         "total_cell_lines":      len(scores),
@@ -168,18 +165,17 @@ def get_gene_essentiality(gene_symbol: str) -> dict:
       is_strongly_selective → essential in a cancer-type subset (best target profile)
       is_common_essential   → essential in all lines (on-target toxicity concern)
       percent_dependent     → % of cell lines with Chronos score < -0.5
-      mean_chronos          → average effect score (< -0.5 = solid dependency)
     """
     symbol = gene_symbol.strip().upper()
 
-    # ── Stage 1: summary CSV ─────────────────────────────────────────────────
+    # ── Stage 1: summary CSV (fast, 26Q1 Chronos_Combined) ───────────────────
     df = _load_summary_df()
     if df is not None:
         row = _find_crispr_row(df, symbol)
         if row is not None:
             return _from_summary_row(symbol, row)
 
-    # ── Stage 2: per-cell-line custom download ───────────────────────────────
+    # ── Stage 2: per-cell-line custom download (fallback for genes not in summary) ──
     result = _from_custom_download(symbol)
     if result:
         return result
@@ -210,7 +206,6 @@ def _int_or_none(v) -> int | None:
 def _error_result(symbol: str, error: str) -> dict:
     return {
         "gene":                  symbol,
-        "mean_chronos":          None,
         "percent_dependent":     None,
         "dependent_cell_lines":  None,
         "total_cell_lines":      None,

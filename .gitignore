@@ -15,6 +15,7 @@ dist/
 build/
 .pytest_cache/
 
+*.db
 
 # Data (raw uploads, processed files — too large for git)
 data/raw/

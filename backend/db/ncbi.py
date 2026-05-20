@@ -1,6 +1,5 @@
 """NCBI Entrez / SRA interface."""
 import time
-from typing import Optional
 from Bio import Entrez
 from config import settings
 
@@ -66,12 +65,3 @@ def _extract_abstract(text: str, index: int) -> str:
     return text[:500]
 
 
-def search_gene_info(gene_symbol: str) -> Optional[dict]:
-    """Fetch gene summary from NCBI Gene database."""
-    with Entrez.esearch(db="gene", term=f"{gene_symbol}[Gene Name] AND Homo sapiens[Organism]") as h:
-        record = Entrez.read(h)
-    ids = record["IdList"]
-    if not ids:
-        return None
-    with Entrez.efetch(db="gene", id=ids[0], rettype="gene_table", retmode="text") as h:
-        return {"gene_id": ids[0], "summary": h.read()[:2000]}

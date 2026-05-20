@@ -14,7 +14,6 @@ Token-cost optimisations:
   - Score threshold: only pass hits with _score > 0.5 to the LLM prompt
   - Abstract text capped at 300 chars in format_for_prompt
 """
-import json
 import hashlib
 import time
 from pinecone import Pinecone

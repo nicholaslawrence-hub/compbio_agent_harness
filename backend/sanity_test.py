@@ -98,8 +98,7 @@ for gene in PROBE_GENES[:4]:
         if result.get("error"):
             print(f"~ {gene}: {result['error']}")
         else:
-            print(f"{OK} {gene}: chronos_mean={result.get('mean_chronos')}, "
-                  f"pct_dependent={result.get('percent_dependent')}%, "
+            print(f"{OK} {gene}: pct_dependent={result.get('percent_dependent')}%, "
                   f"common_essential={result.get('is_common_essential')}, "
                   f"selective={result.get('is_strongly_selective')}")
     except Exception as e:
@@ -206,8 +205,7 @@ for step in pipeline.stream(initial_state):
 
     elif node == "depmap_query":
         for r in data.get("depmap_results", []):
-            print(f"  DEPMAP {r['gene']}: chronos={r.get('mean_chronos')} "
-                  f"pct_dep={r.get('percent_dependent')}% "
+            print(f"  DEPMAP {r['gene']}: pct_dep={r.get('percent_dependent')}% "
                   f"common_essential={r.get('is_common_essential')} "
                   f"selective={r.get('is_strongly_selective')} "
                   f"err={r.get('error')}")
